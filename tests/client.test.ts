@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { GATEWAY_PATH, ToastClient, ToastEdgeBlockedError, ToastGraphqlError, UpstreamHttpError } from '../src/client.js';
-import { SESSION_PAGE_PATH } from '../src/session.js';
-import { FakeTransport, json, SESSION_ID, sessionPage } from './fake-transport.js';
+import { GATEWAY_PATH, jwtExpiry, ToastClient, ToastEdgeBlockedError, ToastGraphqlError, ToastSignedOutError, UpstreamHttpError } from '../src/client.js';
+import { GUEST_SESSION_PAGE_PATH, SESSION_PAGE_PATH } from '../src/session.js';
+import { APP_SESSION_ID, fakeJwt, FakeTransport, json, SESSION_ID, sessionPage } from './fake-transport.js';
 
 describe('ToastClient.graphql', () => {
   it('sends a GET to the gateway on ws-api with the document in the query string', async () => {
@@ -112,7 +112,7 @@ describe('ToastClient guest session', () => {
   it('names a page without a session, and an edge block on the session page', async () => {
     const t = new FakeTransport(ok);
     t.sessionPage = () => ({ status: 404, url: 'u', body: '<html></html>' });
-    await expect(new ToastClient(t).graphql('{a}')).rejects.toThrow(/did not carry a guest session \(HTTP 404\)/);
+    await expect(new ToastClient(t).graphql('{a}')).rejects.toThrow(/order\.toasttab\.com did not render a gateway session \(HTTP 404\)/);
     expect(t.requests).toHaveLength(0);
 
     t.sessionPage = () => ({
@@ -127,18 +127,92 @@ describe('ToastClient guest session', () => {
     const t = new FakeTransport(ok);
     t.sessionPage = () => ({ status: 500, url: 'u', body: '' });
     const client = new ToastClient(t);
-    await expect(client.graphql('{a}')).rejects.toThrow(/guest session/);
+    await expect(client.graphql('{a}')).rejects.toThrow(/gateway session/);
     t.sessionPage = () => sessionPage();
     await expect(client.graphql('{a}')).resolves.toMatchObject({ data: { __typename: 'Query' } });
   });
 });
 
-describe('ToastClient.fetchText', () => {
-  it('returns 2xx bodies and throws on others', async () => {
-    const ok = new FakeTransport(() => ({ status: 200, url: 'u', body: 'hello' }));
-    expect(await new ToastClient(ok).fetchText('order', '/online/x')).toBe('hello');
-    expect(ok.requests[0]).toMatchObject({ host: 'order', path: '/online/x' });
-    const nf = new FakeTransport(() => ({ status: 404, url: 'u', body: 'nope' }));
-    await expect(new ToastClient(nf).fetchText('order', '/online/x')).rejects.toThrow(/HTTP 404/);
+describe('ToastClient.guestGraphql', () => {
+  const OP = { name: 'capmanGuestApp_Test', document: 'query capmanGuestApp_Test($a: Int) { guest { id } }' };
+  const ok = () => json({ data: { guest: { id: 'g' } } });
+
+  it('sends a toast.app session, the guest app client name and the bearer, relayed by a toast.app tab', async () => {
+    const t = new FakeTransport(ok);
+    await new ToastClient(t).guestGraphql(OP, { a: 1 });
+    expect(t.sessionRequests).toEqual([{ host: 'app', path: GUEST_SESSION_PAGE_PATH, method: 'GET' }]);
+    expect(t.cookieReads).toEqual(['toast-customer-access']);
+    const req = t.requests[0];
+    expect(req).toMatchObject({ host: 'ws-api', relay: 'app' });
+    expect(req.headers).toMatchObject({
+      'apollographql-client-name': 'capman-guest-app-browser',
+      'toast-session-id': APP_SESSION_ID,
+      Authorization: `Bearer ${fakeJwt()}`,
+    });
+    const url = new URL(req.path, 'https://x.invalid');
+    expect(url.searchParams.get('operationName')).toBe('capmanGuestApp_Test');
+    expect(url.searchParams.get('variables')).toBe('{"a":1}');
+  });
+
+  it('keeps the two sites\' sessions apart and never sends the bearer on a public query', async () => {
+    const t = new FakeTransport(ok);
+    const client = new ToastClient(t);
+    await client.graphql('{a}');
+    await client.guestGraphql(OP);
+    await client.graphql('{b}');
+    expect(t.sessionRequests.map((r) => r.host)).toEqual(['order', 'app']);
+    expect(t.requests.map((r) => r.headers?.['toast-session-id'])).toEqual([SESSION_ID, APP_SESSION_ID, SESSION_ID]);
+    expect(t.requests[0].headers).not.toHaveProperty('Authorization');
+    expect(t.requests[2].headers).not.toHaveProperty('Authorization');
+  });
+
+  it('refuses before any request when there is no toast.app sign-in', async () => {
+    const t = new FakeTransport(ok);
+    t.cookies = {};
+    await expect(new ToastClient(t).guestGraphql(OP)).rejects.toBeInstanceOf(ToastSignedOutError);
+    await expect(new ToastClient(t).guestGraphql(OP)).rejects.toThrow(/not signed in.*toast\.app/s);
+    expect(t.requests).toHaveLength(0);
+  });
+
+  it('refuses an access token within a minute of expiry instead of sending it', async () => {
+    const t = new FakeTransport(ok);
+    t.cookies = { 'toast-customer-access': fakeJwt(2_000_000_030) };
+    const client = new ToastClient(t, { now: () => 2_000_000_000_000 });
+    await expect(client.guestGraphql(OP)).rejects.toThrow(/expired/);
+    expect(t.requests).toHaveLength(0);
+  });
+
+  it('sends a token whose expiry cannot be read, and lets Toast judge it', async () => {
+    const t = new FakeTransport(ok);
+    t.cookies = { 'toast-customer-access': 'opaque-token' };
+    await new ToastClient(t).guestGraphql(OP);
+    expect(t.requests[0].headers?.Authorization).toBe('Bearer opaque-token');
+  });
+
+  it('turns "not permitted to call guest" into the sign-in remedy', async () => {
+    const t = new FakeTransport(() =>
+      json({ errors: [{ message: 'Exception while fetching data (/guest) : You are not permitted to call guest' }] }),
+    );
+    await expect(new ToastClient(t).guestGraphql(OP)).rejects.toBeInstanceOf(ToastSignedOutError);
+  });
+
+  it('passes other gateway errors through unchanged', async () => {
+    const t = new FakeTransport(() => json({ errors: [{ message: 'Cannot query field "x"' }] }, 400));
+    await expect(new ToastClient(t).guestGraphql(OP)).rejects.toBeInstanceOf(ToastGraphqlError);
+  });
+
+  it('names a toast.app page without a session', async () => {
+    const t = new FakeTransport(ok);
+    t.appSessionPage = () => ({ status: 404, url: 'u', body: '<html></html>' });
+    await expect(new ToastClient(t).guestGraphql(OP)).rejects.toThrow(/https:\/\/toast\.app did not render a gateway session/);
+  });
+});
+
+describe('jwtExpiry', () => {
+  it('reads exp as epoch ms, and null for anything it cannot decode', () => {
+    expect(jwtExpiry(fakeJwt(1_800_000_000))).toBe(1_800_000_000_000);
+    expect(jwtExpiry('no-dots')).toBeNull();
+    expect(jwtExpiry('a.!!!.c')).toBeNull();
+    expect(jwtExpiry(`a.${Buffer.from('{"exp":"soon"}').toString('base64url')}.c`)).toBeNull();
   });
 });

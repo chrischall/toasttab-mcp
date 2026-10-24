@@ -1,0 +1,18 @@
+{
+  "data": {
+    "guest": {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "wallet": {
+        "guestCurrencyAccount": {
+          "id": "00000000-0000-4000-8000-000000000016",
+          "availableBalanceWithStoredValue": {
+            "amount": "4.50",
+            "currency": "USD"
+          },
+          "nearestFutureExpirableDayValue": null
+        },
+        "id": "00000000-0000-4000-8000-000000000011"
+      }
+    }
+  }
+}

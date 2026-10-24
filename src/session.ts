@@ -58,3 +58,38 @@ export function sessionFromPage(html: string): GuestSession | null {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// The signed-in guest's session (toast.app)
+//
+// Guest-account reads (order history, loyalty, Toast Cash) go to the same
+// gateway under a different Apollo client, and the gateway keys sessions to
+// it: an order.toasttab.com session sent as `capman-guest-app-browser` is
+// Forbidden, and vice versa (verified live 2026-10-24). toast.app is a Next.js
+// app; it renders its session into the page's React Server Components flight
+// data as escaped JSON `{"id","issuedAt","expiresAt"}`, on every page
+// including a 404. The guest's identity is a separate bearer token (see
+// client.ts); this session alone answers "You are not permitted to call guest".
+
+/** Apollo client name of Toast's guest web app (toast.app). */
+export const GUEST_CLIENT_NAME = 'capman-guest-app-browser';
+/**
+ * toast.app's access-token cookie: a JWT of about 30 minutes, readable by the
+ * page, sent as `Authorization: Bearer`. The only cookie this server reads.
+ */
+export const GUEST_ACCESS_COOKIE = 'toast-customer-access';
+/** A toast.app path that 404s but still renders a session. */
+export const GUEST_SESSION_PAGE_PATH = '/toasttab-mcp-session';
+
+// The flight data escapes quotes once (`\"`) inside a JS string; tolerate any
+// depth of backslash-escaping rather than one exact layer.
+const FLIGHT_SESSION =
+  /\{\\*"id\\*":\\*"([^"\\]+)\\*",\\*"issuedAt\\*":\\*"[^"\\]+\\*",\\*"expiresAt\\*":\\*"([^"\\]+)\\*"\}/;
+
+/** Read the guest session out of a toast.app page, or null. */
+export function sessionFromFlightData(html: string): GuestSession | null {
+  const m = html.match(FLIGHT_SESSION);
+  if (!m) return null;
+  const expiresAt = Date.parse(m[2]);
+  return Number.isNaN(expiresAt) ? null : { id: m[1], expiresAt };
+}

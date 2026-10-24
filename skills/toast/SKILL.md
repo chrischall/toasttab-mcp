@@ -18,6 +18,17 @@ Read-only access to Toast's diner side, relayed through the user's own browser.
 
    Use `query` to search, and `include_out_of_stock: false` to hide sold-out items.
 
+## The user's own account
+
+With a signed-in toast.app tab in the bridged browser:
+
+- `toast_list_orders`: order history, newest first. Pass `next_page_token` for older orders.
+- `toast_get_order`: a full receipt. It takes `restaurant_guid` + `order_guid` from a `toast_list_orders` row.
+- `toast_get_loyalty`: loyalty programs, balances and progress toward rewards.
+- `toast_get_wallet`: Toast Cash balance and its units.
+
+On a "not signed in" or "expired" error, ask the user to open or reload toast.app and sign in. Don't retry in a loop. `dining_option` and `status` are Toast's own values. Don't relabel them (an order shown as "Delivery" on toast.app can carry `TAKE_OUT`).
+
 ## Rules
 
 - Report out-of-stock items as out of stock today, not as removed.

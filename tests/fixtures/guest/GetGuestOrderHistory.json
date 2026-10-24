@@ -1,0 +1,75 @@
+{
+  "data": {
+    "orderHistory": {
+      "nextPageToken": "TEST_NEXT_PAGE_TOKEN",
+      "orders": [
+        {
+          "guid": "00000000-0000-4000-8000-000000000001",
+          "openedDateTime": 1768501800000,
+          "diningOptionBehavior": "TAKE_OUT",
+          "numberOfSelections": 6,
+          "orderStatus": "READY_FOR_PICKUP",
+          "selections": [
+            {
+              "guid": "00000000-0000-4000-8000-000000000002",
+              "name": "name-1",
+              "quantity": 1
+            },
+            {
+              "guid": "00000000-0000-4000-8000-000000000003",
+              "name": "name-2",
+              "quantity": 1
+            }
+          ],
+          "totalV2": 12.34,
+          "restaurant": {
+            "timeZoneId": "America/New_York",
+            "guid": "00000000-0000-4000-8000-000000000004",
+            "location": {
+              "country": "US"
+            },
+            "logoUrls": {
+              "xs": "https://example.invalid/image.png"
+            },
+            "name": "name-3",
+            "shortUrl": "shortUrl-4",
+            "whiteLabelName": "whiteLabelName-5"
+          }
+        },
+        {
+          "guid": "00000000-0000-4000-8000-000000000005",
+          "openedDateTime": 1768501800000,
+          "diningOptionBehavior": "DINE_IN",
+          "numberOfSelections": 11,
+          "orderStatus": "READY_FOR_PICKUP",
+          "selections": [
+            {
+              "guid": "00000000-0000-4000-8000-000000000006",
+              "name": "name-6",
+              "quantity": 1
+            },
+            {
+              "guid": "00000000-0000-4000-8000-000000000007",
+              "name": "name-7",
+              "quantity": 1
+            }
+          ],
+          "totalV2": 12.34,
+          "restaurant": {
+            "timeZoneId": "America/New_York",
+            "guid": "00000000-0000-4000-8000-000000000008",
+            "location": {
+              "country": "US"
+            },
+            "logoUrls": {
+              "xs": "https://example.invalid/image.png"
+            },
+            "name": "name-8",
+            "shortUrl": "shortUrl-9",
+            "whiteLabelName": "whiteLabelName-10"
+          }
+        }
+      ]
+    }
+  }
+}

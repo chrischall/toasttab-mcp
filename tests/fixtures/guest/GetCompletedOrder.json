@@ -1,0 +1,94 @@
+{
+  "data": {
+    "completedOrder": {
+      "guid": "00000000-0000-4000-8000-000000000001",
+      "appliedToastFundedOffers": [],
+      "checkGuid": "00000000-0000-4000-8000-000000000009",
+      "checkNumber": 7,
+      "deliveryInfo": {
+        "address1": "address1-11",
+        "address2": "address2-12",
+        "city": "city-13",
+        "state": "NC",
+        "zipCode": "00000"
+      },
+      "deliveryServiceCharges": 0,
+      "deliveryServiceInfo": null,
+      "diningOptionBehavior": "TAKE_OUT",
+      "discounts": {
+        "boostDiscount": null,
+        "globalReward": null
+      },
+      "discountsTotal": 0,
+      "fundraisingTotal": 0,
+      "giftCard": null,
+      "gratuityServiceCharges": 0,
+      "nonDeliveryNonGratuityNonUbpServiceCharges": 0,
+      "openedDateTime": 1768501800000,
+      "orderStatus": "READY_FOR_PICKUP",
+      "payments": [
+        {
+          "amount": 12.34,
+          "cardType": "AMEX",
+          "guid": "00000000-0000-4000-8000-000000000010",
+          "last4Digits": "0000",
+          "otherPaymentName": null,
+          "totalAmount": 12.34,
+          "type": "CREDIT"
+        }
+      ],
+      "preDiscountItemsSubtotal": 7,
+      "processingServiceCharges": 0,
+      "selections": [
+        {
+          "guid": "00000000-0000-4000-8000-000000000002",
+          "modifiers": [
+            {
+              "name": "name-16"
+            },
+            {
+              "name": "name-17"
+            }
+          ],
+          "name": "name-18",
+          "price": 20,
+          "quantity": 1
+        },
+        {
+          "guid": "00000000-0000-4000-8000-000000000003",
+          "modifiers": [
+            {
+              "name": "name-19"
+            },
+            {
+              "name": "name-20"
+            }
+          ],
+          "name": "name-21",
+          "price": 18,
+          "quantity": 1
+        }
+      ],
+      "surchargeServiceCharges": {
+        "baseAmount": 0,
+        "taxAmount": 0
+      },
+      "taxV2": 12.34,
+      "tip": 10,
+      "totalV2": 12.34,
+      "restaurant": {
+        "guid": "00000000-0000-4000-8000-000000000004",
+        "location": {
+          "country": "US"
+        },
+        "logoUrls": {
+          "xs": "https://example.invalid/image.png"
+        },
+        "name": "name-22",
+        "shortUrl": "shortUrl-23",
+        "timeZoneId": "America/New_York",
+        "whiteLabelName": "whiteLabelName-24"
+      }
+    }
+  }
+}
