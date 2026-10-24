@@ -1,7 +1,4 @@
-// Single source of truth for the server's package name and version. Release-
-// please bumps the VERSION literal (listed in release-please-config.json
-// `extra-files`), and tests/version-sync.test.ts guards it against
-// package.json drift. Importing these instead of package.json keeps the whole
-// manifest — npm scripts included — out of dist/bundle.js.
-export const SERVER_NAME = 'ofw-mcp';
-export const VERSION = '2.20.6'; // x-release-please-version
+// The one release-please marker for this package's version. `index.ts` feeds
+// it to the MCP server and to the fetchproxy bridge identity; never import
+// package.json from src/ (esbuild would inline the whole manifest).
+export const VERSION = '0.0.0'; // x-release-please-version
