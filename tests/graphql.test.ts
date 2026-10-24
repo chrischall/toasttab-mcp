@@ -46,6 +46,8 @@ describe('assertReadOnlyDocument', () => {
     '{ mutation { x } }', // a FIELD named mutation is fine
     'query { a(s: "mutation { x }") }',
     '# mutation { x }\nquery { a }',
+    'query { a(s: """block # with mutation { x } inside""") }',
+    'query { a(s: "quote # not a comment") } # mutation',
   ])('allows %s', (doc) => {
     expect(() => assertReadOnlyDocument(doc)).not.toThrow();
   });
@@ -55,6 +57,9 @@ describe('assertReadOnlyDocument', () => {
     'query { a } mutation M { b }',
     'subscription { orders }',
     '  mutation\n{ x }',
+    // A block-string quote inside a comment must not hide what follows it.
+    'query Q { __typename } # """\nmutation M { placeOrder { id } }\n# """',
+    'query Q { a } # """\nmutation M { b(s: """x""") { id } }',
   ])('refuses %s', (doc) => {
     expect(() => assertReadOnlyDocument(doc)).toThrow(/read-only/);
   });

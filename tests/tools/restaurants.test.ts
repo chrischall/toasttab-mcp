@@ -88,6 +88,14 @@ describe('toast_resolve_restaurant', () => {
     expect(t.requests[2].path).toBe('/online/joes-pizza');
   });
 
+  it('refuses latitude without longitude instead of silently skipping the directory', async () => {
+    const t = new FakeTransport(() => json({ data: {} }));
+    const res = await (await harness(t)).callTool('toast_resolve_restaurant', { reference: 'joes-pizza', latitude: 35 });
+    expect(res.isError).toBe(true);
+    expect(JSON.stringify(res.content)).toMatch(/latitude and longitude together/);
+    expect(t.requests).toHaveLength(0);
+  });
+
   it('says what to do when nothing resolves', async () => {
     const t = new FakeTransport(() => ({ status: 200, url: 'u', body: '<html></html>' }));
     const res = parseToolResult<{ guid: null; next_step: string }>(

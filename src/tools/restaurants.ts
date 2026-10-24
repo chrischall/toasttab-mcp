@@ -104,12 +104,16 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
     {
       description:
         "Turn a Toast link, shortUrl, or GUID into the restaurant GUID that toast_get_menu needs. Handles order.toasttab.com/online/<shortUrl> links, toast.app links (r-<guid>), ?guid= parameters and bare GUIDs without any network call. A bare shortUrl has no GUID in it: pass latitude/longitude near the restaurant to look it up in Toast's directory (most reliable), otherwise the tool reads the restaurant's ordering page through your browser and accepts a GUID only if the page names exactly one.",
-      inputSchema: z.object({
-        reference: z.string().min(1).describe('A Toast ordering link, toast.app link, restaurant GUID, or shortUrl slug.'),
-        latitude: latitude.optional(),
-        longitude: longitude.optional(),
-        radius_miles: radius,
-      }),
+      inputSchema: z
+        .object({
+          reference: z.string().min(1).describe('A Toast ordering link, toast.app link, restaurant GUID, or shortUrl slug.'),
+          latitude: latitude.optional(),
+          longitude: longitude.optional(),
+          radius_miles: radius,
+        })
+        .refine((a) => (a.latitude === undefined) === (a.longitude === undefined), {
+          message: 'Pass latitude and longitude together, or neither.',
+        }),
       annotations: READ,
     },
     async ({ reference, latitude, longitude, radius_miles }) => {
@@ -143,7 +147,7 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
         short_url: shortUrl,
         resolved_by: null,
         next_step:
-          latitude === undefined
+          latitude === undefined || longitude === undefined
             ? 'Not resolved. Call again with latitude/longitude near the restaurant so it can be found in Toast\'s directory, or use toast_find_restaurants there.'
             : `Not found within ${radius_miles} mi of the given point, and the ordering page did not name a single restaurant GUID. Widen radius_miles or check the point is near the restaurant.`,
       });

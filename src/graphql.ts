@@ -87,10 +87,13 @@ export const TYPENAME_QUERY = '{__typename}';
  * field merely NAMED "mutation" sits inside braces and is not affected.
  */
 export function assertReadOnlyDocument(document: string): void {
-  const stripped = document
-    .replace(/"""[\s\S]*?"""/g, '""')
-    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
-    .replace(/#[^\n\r]*/g, '');
+  // One left-to-right pass: whichever of comment / block string / string
+  // starts first wins, as in the GraphQL lexer. Separate passes would let a
+  // `"""` inside a `#` comment swallow the lines that follow it.
+  const stripped = document.replace(
+    /#[^\n\r]*|"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"/g,
+    (m) => (m.startsWith('#') ? '' : '""'),
+  );
   let depth = 0;
   let parens = 0;
   let sawOperation = false;
