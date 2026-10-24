@@ -27,6 +27,7 @@ No coverage threshold.
 src/
   index.ts                 entry: FetchproxyTransport → ToastClient → runMcp
   version.ts               VERSION (the one x-release-please-version marker)
+  config.ts                parsePort (TOAST_WS_PORT, fails loudly on a bad value)
   transport.ts             ToastTransport interface ({host, path, GET} → {status, body, url})
   transport-fetchproxy.ts  relays ws-api requests via an order.toasttab.com tab (viaTab)
   session.ts               gateway-session constants + sessionFromPage() / sessionFromFlightData()

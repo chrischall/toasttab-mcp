@@ -51,6 +51,15 @@ describe('mergeMenus / filterMenus', () => {
     expect(merged[1].groups[0].items.map((i) => i.name)).toEqual(['Espresso', 'Mystery']);
   });
 
+  it('keeps an item listed under two groups of the same menu set', () => {
+    const popular = [{ name: 'Lunch', groups: [{ name: 'Popular', items: [item('a', 'Latte')] }, { name: 'Coffee', items: [item('a', 'Latte')] }] }];
+    const merged = mergeMenus([{ source: 'online', menus: popular }, { source: 'pos', menus: pos }]);
+    const lattes = merged[0].groups.flatMap((g) => g.items);
+    expect(merged[0].groups.map((g) => g.name)).toEqual(['Popular', 'Coffee']);
+    expect(lattes.every((i) => i.sources.join() === 'online,pos')).toBe(true);
+    expect(filterMenus(merged, { query: 'coffee', includeOutOfStock: true, limit: 10 }).menus[0].groups[0].items[0].guid).toBe('a');
+  });
+
   it('filters by query (name, description, group), stock and limit', () => {
     const merged = mergeMenus([{ source: 'online', menus: online }, { source: 'pos', menus: pos }]);
     expect(filterMenus(merged, { query: 'latte', includeOutOfStock: true, limit: 10 })).toMatchObject({ total_items: 1, returned: 1, truncated: false });

@@ -15,9 +15,10 @@ import { registerGraphqlTools } from './tools/graphql.js';
 import { registerAccountTools } from './tools/account.js';
 import { registerHealthcheckTools } from './tools/healthcheck.js';
 import { VERSION } from './version.js';
+import { parsePort } from './config.js';
 
-const wsPort = readEnvVar('TOAST_WS_PORT');
-const transport = new FetchproxyTransport({ port: wsPort ? Number(wsPort) : undefined, version: VERSION });
+const wsPort = parsePort(readEnvVar('TOAST_WS_PORT'));
+const transport = new FetchproxyTransport({ port: wsPort, version: VERSION });
 
 // Start before the server so tools/list always answers and the first tool
 // call is what surfaces a bridge problem.

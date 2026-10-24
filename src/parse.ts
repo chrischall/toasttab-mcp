@@ -130,14 +130,17 @@ function shapeItem(raw: unknown, source: MenuSource): MenuItem {
 }
 
 /**
- * Merge one or two menu sets (online first, then POS). An item seen on both
- * is listed once, where it first appeared, with both sources recorded — Toast
- * prices an item identically on both, so the online copy loses nothing.
- * Items without a GUID are never merged (there is nothing to merge them by).
+ * Merge one or two menu sets (online first, then POS). An item from the second
+ * set that the first already listed is not repeated; the first listing records
+ * both sources instead. Toast prices an item identically on both, so the
+ * online copy loses nothing. Within ONE set, an item listed under several
+ * groups (a "Popular" group plus its real category, say) keeps every listing,
+ * and all of them share one `sources` array. Items without a GUID are never
+ * merged (there is nothing to merge them by).
  */
 export function mergeMenus(sets: Array<{ source: MenuSource; menus: unknown[] }>): Menu[] {
   const out: Menu[] = [];
-  const seen = new Map<string, MenuItem>();
+  const firstSeen = new Map<string, { source: MenuSource; sources: MenuSource[] }>();
   for (const { source, menus } of sets) {
     for (const rawMenu of menus) {
       const m = obj(rawMenu);
@@ -147,12 +150,13 @@ export function mergeMenus(sets: Array<{ source: MenuSource; menus: unknown[] }>
         const items: MenuItem[] = [];
         for (const rawItem of arr(g.items)) {
           const item = shapeItem(rawItem, source);
-          const prior = item.guid ? seen.get(item.guid) : undefined;
-          if (prior) {
+          const prior = item.guid ? firstSeen.get(item.guid) : undefined;
+          if (prior && prior.source !== source) {
             if (!prior.sources.includes(source)) prior.sources.push(source);
             continue;
           }
-          if (item.guid) seen.set(item.guid, item);
+          if (prior) item.sources = prior.sources;
+          else if (item.guid) firstSeen.set(item.guid, { source, sources: item.sources });
           items.push(item);
         }
         if (items.length > 0) groups.push({ name: str(g.name), items });
