@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.env
+*.skill
+*.mcpb
+.claude/worktrees/
+# local Codex config + skill mirrors (generated, not shared)
+.agents/
+.codex/
