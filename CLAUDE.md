@@ -28,49 +28,65 @@ src/
   index.ts                 entry: FetchproxyTransport → ToastClient → runMcp
   version.ts               VERSION (the one x-release-please-version marker)
   transport.ts             ToastTransport interface ({host, path, GET} → {status, body, url})
-  transport-fetchproxy.ts  relays ws-api requests via an order.toasttab.com tab (viaTab), then www
-  client.ts                ToastClient.graphql() over GET + error mapping; fetchText()
+  transport-fetchproxy.ts  relays ws-api requests via an order.toasttab.com tab (viaTab)
+  session.ts               guest-session constants + sessionFromPage() (the gateway's auth)
+  client.ts                ToastClient.graphql() over GET under a cached guest session + error mapping; fetchText()
   graphql.ts               query builders (inlined literals) + assertReadOnlyDocument
   parse.ts                 pure shaping: restaurants, menu merge/filter
-  urls.ts                  link/shortUrl/GUID parsing, ordering-page GUID extraction, distance
+  urls.ts                  link/shortUrl/GUID parsing, distance
   view.ts                  view: compact (shaped) | full (raw gateway data)
   tools/                   restaurants.ts, menus.ts, graphql.ts, healthcheck.ts
 tests/                     FakeTransport drives the REAL ToastClient; roster.ts feeds the meta-tests
 ```
 
-## Toast gateway facts (and how sure we are)
+## Toast gateway facts
+
+Live-verified 2026-10-24 through a bridged order.toasttab.com tab unless marked.
 
 - Endpoint: `https://ws-api.toasttab.com/do-federated-gateway/v1/graphql`.
   CORS allows `https://order.toasttab.com` with credentials, which is why an
-  ordering tab is the relay (`API_RELAY_TABS`). An API host can't relay its own
+  ordering tab is the relay (`API_RELAY_TAB`). An API host can't relay its own
   requests: Chrome renders an error page there, and no content script can run
-  in it.
-- **GET only.** Queries go in the query string. The gateway refuses POST from
-  outside Toast's origin, and GET keeps every request visibly a read.
-- `nearbyRestaurants(input:{diningOption,fulfillmentDateTime,latitude,longitude,radius})`
-  and `menusV3(input:{restaurantGuid[,visibility:POS]})` are the **only**
-  operations with a known shape. They come from a third-party collector
-  (tylerherman19/Coffee#10), not from a capture in this repo. Treat every
-  field outside `src/graphql.ts`'s selections as unknown. One wrong field fails
-  the whole query, so extend a selection only after `toast_graphql` has shown
-  the field exists live.
-- Arguments are **inlined literals**, because `$variables` would need input
-  type names nobody has seen. Strings go through `gqlString`
+  in it. `www.toasttab.com` redirects to `toast.app`, so it is no relay either.
+- **The gateway needs a guest session.** Without BOTH `toast-session-id` and
+  `apollographql-client-name: sites-web-client` it answers
+  `{"errors":[{"message":"Forbidden"}]}`, even in Toast's own tab with the
+  user's cookies. A made-up session id is still Forbidden; another client
+  name fails the CORS preflight. The id comes from
+  `<div id="session" data-content="<base64 JSON {id,issuedAt,expiresAt}>"/>`,
+  rendered on every order.toasttab.com page (padding written as `&#x3D;`),
+  one-hour lifetime. `ToastClient` mints from `SESSION_PAGE_PATH`, a slug that
+  404s (~12 KB, vs ~830 KB for a real menu page), re-mints 5 min before expiry,
+  and on a Forbidden drops the session and retries exactly once.
+- GET and POST both work once the headers are right. We use GET so every
+  request is visibly a read. The SPA itself sends batched POSTs with persisted
+  query hashes (`toast-persistent-query-hash`); we send plain documents and
+  the gateway accepts them.
+- **Introspection is disabled.** Field discovery is by validation errors
+  ("Did you mean…") and by reading the SPA's server-rendered Apollo state
+  (`window.__OO_STATE__` / `__APOLLO_STATE__` in the page HTML), whose cache
+  keys name real operations and arguments.
+- `nearbyRestaurants(input:{diningOption,fulfillmentDateTime,latitude,longitude,radius})`:
+  `radius` is miles, results are restaurants **open at `fulfillmentDateTime`**,
+  capped at **300** rows. `TAKE_OUT` and `DELIVERY` both work; DELIVERY is a
+  subset (114 vs 196 within 2 mi of uptown Charlotte).
+- `menusV3(input:{restaurantGuid[,visibility:POS]})` answers
+  `__typename: "MenusResponse"`; no `visibility` is the online menu, `POS` the
+  register menu (about 2× larger in the sample). **Prices are dollars**:
+  `price: 12.5` is shown as $12.50 on the ordering page.
+- `restaurantV2ByShortUrl(shortUrl:)` returns the union `RestaurantOrError`:
+  `Restaurant {guid name shortUrl}` for a known slug, `GeneralError` (no other
+  fields) for an unknown one. This is how `toast_resolve_restaurant` resolves a
+  slug. Ordering pages are not scraped for a GUID: they embed sister locations'
+  `restaurantGuid`s too, so no HTML rule can pick the right one.
+- The nearby/menu selections first came from a third-party collector
+  (tylerherman19/Coffee#10). One wrong field fails the whole query, so extend
+  a selection only after `toast_graphql` has shown the field exists live.
+- Arguments are **inlined literals**, because `$variables` need input type
+  names that introspection would have given us. Strings go through `gqlString`
   (JSON.stringify), numbers through `gqlNumber`, and enums come from a closed
   list. Keep it that way: an un-escaped interpolation is a query-injection
   hole.
-- `nearbyRestaurants` returns only restaurants **open at
-  `fulfillmentDateTime`**, at most **299** per call.
-  `toast_resolve_restaurant` therefore tries now and now+12h.
-- `menusV3` with no `visibility` returns the online menu; `POS` returns the
-  register menu, often several times larger. The response is a union
-  (`... on MenusResponse`), and `__typename` is selected so the other arm is
-  reported, not mistaken for an empty menu.
-- Price units are UNVERIFIED (dollars in Toast's partner APIs). The tool
-  descriptions say so; don't silently convert.
-- `guidFromOrderingPage` is a guess at the SPA's markup. It is deliberately
-  strict (exactly one distinct `restaurantGuid`), so a wrong match is
-  impossible and a miss just falls through to "not resolved".
 
 ## Rules
 

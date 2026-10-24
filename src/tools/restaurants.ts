@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { ToastClient } from '../client.js';
-import { DINING_OPTIONS, nearbyRestaurantsQuery } from '../graphql.js';
-import { nameMatches, NEARBY_PAGE_CAP, shapeRestaurant, type Restaurant } from '../parse.js';
-import { guidFromOrderingPage, parseToastReference } from '../urls.js';
+import { DINING_OPTIONS, nearbyRestaurantsQuery, restaurantByShortUrlQuery } from '../graphql.js';
+import { nameMatches, NEARBY_PAGE_CAP, readRestaurantByShortUrl, shapeRestaurant, typenameOf, type Restaurant } from '../parse.js';
+import { parseToastReference } from '../urls.js';
 import { isFull, respond, viewArg } from '../view.js';
 
 const READ = { readOnlyHint: true, idempotentHint: true, openWorldHint: true } as const;
@@ -15,7 +15,7 @@ const radius = z
   .min(0.1)
   .max(25)
   .default(2)
-  .describe('Search radius in miles (0.1–25, default 2). Toast caps one answer at 299 restaurants.');
+  .describe('Search radius in miles (0.1–25, default 2). Toast caps one answer at 300 restaurants.');
 
 /**
  * The instant to ask about. Toast's directory filters by "open for this
@@ -70,7 +70,7 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
         dining_option: z
           .enum(DINING_OPTIONS)
           .default('TAKE_OUT')
-          .describe('TAKE_OUT (default; the verified value) or DELIVERY (accepted by the schema as far as is known, unverified).'),
+          .describe('TAKE_OUT (default) or DELIVERY. DELIVERY lists only restaurants that deliver to the point.'),
         when: z.string().optional().describe('ISO-8601 date-time the order would be fulfilled at. Default: now.'),
         limit: z.number().int().min(1).max(NEARBY_PAGE_CAP).default(25).describe('Max restaurants to return (default 25).'),
         view: viewArg(),
@@ -103,53 +103,27 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
     'toast_resolve_restaurant',
     {
       description:
-        "Turn a Toast link, shortUrl, or GUID into the restaurant GUID that toast_get_menu needs. Handles order.toasttab.com/online/<shortUrl> links, toast.app links (r-<guid>), ?guid= parameters and bare GUIDs without any network call. A bare shortUrl has no GUID in it: pass latitude/longitude near the restaurant to look it up in Toast's directory (most reliable), otherwise the tool reads the restaurant's ordering page through your browser and accepts a GUID only if the page names exactly one.",
-      inputSchema: z
-        .object({
-          reference: z.string().min(1).describe('A Toast ordering link, toast.app link, restaurant GUID, or shortUrl slug.'),
-          latitude: latitude.optional(),
-          longitude: longitude.optional(),
-          radius_miles: radius,
-        })
-        .refine((a) => (a.latitude === undefined) === (a.longitude === undefined), {
-          message: 'Pass latitude and longitude together, or neither.',
-        }),
+        "Turn a Toast link, shortUrl, or GUID into the restaurant GUID that toast_get_menu needs. Links that carry a GUID (toast.app r-<guid> links, ?guid= parameters, bare GUIDs) resolve without a network call; an order.toasttab.com/online/<shortUrl> link or bare shortUrl is looked up in Toast by its slug. Returns guid: null with a next step when Toast does not know the slug.",
+      inputSchema: z.object({
+        reference: z.string().min(1).describe('A Toast ordering link, toast.app link, restaurant GUID, or shortUrl slug.'),
+      }),
       annotations: READ,
     },
-    async ({ reference, latitude, longitude, radius_miles }) => {
+    async ({ reference }) => {
       const ref = parseToastReference(reference);
       if (ref.guid) return respond({ guid: ref.guid, short_url: ref.shortUrl, resolved_by: 'reference' });
       const shortUrl = ref.shortUrl as string;
 
-      if (latitude !== undefined && longitude !== undefined) {
-        // Directory lookup. Noon local-ish time is not knowable here, so ask
-        // "open now" first and, failing a hit, an instant 12h away — between
-        // them one lands inside trading hours for almost every restaurant.
-        for (const offsetHours of [0, 12]) {
-          const when = new Date(Date.now() + offsetHours * 3_600_000).toISOString();
-          const found = await findNearby(client, {
-            latitude,
-            longitude,
-            radiusMiles: radius_miles,
-            diningOption: 'TAKE_OUT',
-            when,
-          });
-          const hit = found.restaurants.find((r) => r.short_url?.toLowerCase() === shortUrl);
-          if (hit?.guid) return respond({ guid: hit.guid, short_url: shortUrl, resolved_by: 'directory', restaurant: hit });
-        }
-      }
-
-      const html = await client.fetchText('order', `/online/${encodeURIComponent(shortUrl)}`);
-      const guid = guidFromOrderingPage(html);
-      if (guid) return respond({ guid, short_url: shortUrl, resolved_by: 'ordering_page' });
+      const { data } = await client.graphql<{ restaurantV2ByShortUrl?: unknown }>(restaurantByShortUrlQuery(shortUrl));
+      const hit = readRestaurantByShortUrl(data.restaurantV2ByShortUrl);
+      if (hit) return respond({ guid: hit.guid, short_url: hit.short_url ?? shortUrl, name: hit.name, resolved_by: 'short_url' });
       return respond({
         guid: null,
         short_url: shortUrl,
         resolved_by: null,
+        toast_answer: typenameOf(data.restaurantV2ByShortUrl),
         next_step:
-          latitude === undefined || longitude === undefined
-            ? 'Not resolved. Call again with latitude/longitude near the restaurant so it can be found in Toast\'s directory, or use toast_find_restaurants there.'
-            : `Not found within ${radius_miles} mi of the given point, and the ordering page did not name a single restaurant GUID. Widen radius_miles or check the point is near the restaurant.`,
+          "Toast does not know this shortUrl. Check the link (the slug is the path segment after /online/), or find the restaurant with toast_find_restaurants near it.",
       });
     },
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { guidFromOrderingPage, milesBetween, orderingUrl, parseToastReference } from '../src/urls.js';
+import { milesBetween, orderingUrl, parseToastReference } from '../src/urls.js';
 import { GUID_A, GUID_B } from './fake-transport.js';
 
 describe('parseToastReference', () => {
@@ -29,18 +29,6 @@ describe('parseToastReference', () => {
     expect(() => parseToastReference('https://order.toasttab.com/online/')).toThrow(/Could not find/);
     expect(() => parseToastReference('online')).toThrow();
     expect(() => parseToastReference('http://[bad')).toThrow(/Not a Toast/);
-  });
-});
-
-describe('guidFromOrderingPage', () => {
-  it('accepts exactly one distinct restaurantGuid, plain or escaped JSON', () => {
-    expect(guidFromOrderingPage(`{"restaurantGuid":"${GUID_A}","x":1,"restaurantGuid":"${GUID_A}"}`)).toBe(GUID_A);
-    expect(guidFromOrderingPage(`"{\\"restaurantGuid\\":\\"${GUID_A}\\"}"`)).toBe(GUID_A);
-  });
-
-  it('refuses zero or several, and ignores other keys', () => {
-    expect(guidFromOrderingPage(`{"guid":"${GUID_A}"}`)).toBeNull();
-    expect(guidFromOrderingPage(`{"restaurantGuid":"${GUID_A}","restaurantGuid":"${GUID_B}"}`)).toBeNull();
   });
 });
 

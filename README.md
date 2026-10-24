@@ -34,7 +34,7 @@ All of these tools are read-only. None of them places an order, touches a cart o
 
 ### What is verified and what isn't
 
-The two operations behind the dedicated tools are `nearbyRestaurants` and `menusV3`. Both come from a public third-party collector that runs them against the same gateway ([tylerherman19/Coffee#10](https://github.com/tylerherman19/Coffee/pull/10)). They have **not yet been live-verified from this repo**: Cloudflare blocked the environment this server was written in. Some details are therefore unverified, among them the `DELIVERY` dining option, whether menu prices are dollars or cents, and how ordering pages embed a restaurant GUID. The tool descriptions say so where it matters.
+The operations behind the dedicated tools (`nearbyRestaurants`, `menusV3` and `restaurantV2ByShortUrl`) were live-verified on 2026-10-24 through a bridged browser. Menu prices are in dollars, and both `TAKE_OUT` and `DELIVERY` work. The gateway only answers requests that carry a guest session, which the server mints itself from an order.toasttab.com page through your browser, so you don't need to do anything beyond keeping that tab open.
 
 Guest-account features (order history, loyalty, saved cards, gift cards) are **not built yet**, because their payloads have never been seen. `toast_graphql` is the way to capture them through your own session, so a dedicated tool can be built on a real response instead of a guess.
 

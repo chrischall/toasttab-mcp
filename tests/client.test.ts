@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GATEWAY_PATH, ToastClient, ToastEdgeBlockedError, ToastGraphqlError, UpstreamHttpError } from '../src/client.js';
-import { FakeTransport, json } from './fake-transport.js';
+import { SESSION_PAGE_PATH } from '../src/session.js';
+import { FakeTransport, json, SESSION_ID, sessionPage } from './fake-transport.js';
 
 describe('ToastClient.graphql', () => {
   it('sends a GET to the gateway on ws-api with the document in the query string', async () => {
@@ -52,6 +53,83 @@ describe('ToastClient.graphql', () => {
     await expect(new ToastClient(html).graphql('{a}')).rejects.toBeInstanceOf(UpstreamHttpError);
     const empty = new FakeTransport(() => json({}));
     await expect(new ToastClient(empty).graphql('{a}')).rejects.toThrow(/no data/);
+  });
+});
+
+describe('ToastClient guest session', () => {
+  const ok = () => json({ data: { __typename: 'Query' } });
+  const forbidden = () => json({ errors: [{ message: 'Forbidden' }] }, 403);
+
+  it('mints a session from the ordering page and sends it with the SPA client name', async () => {
+    const t = new FakeTransport(ok);
+    await new ToastClient(t).graphql('{a}');
+    expect(t.sessionRequests).toEqual([{ host: 'order', path: SESSION_PAGE_PATH, method: 'GET' }]);
+    expect(t.requests[0].headers).toMatchObject({
+      'apollographql-client-name': 'sites-web-client',
+      'toast-session-id': SESSION_ID,
+    });
+  });
+
+  it('reuses the session across calls and shares one mint between concurrent calls', async () => {
+    const t = new FakeTransport(ok);
+    const client = new ToastClient(t);
+    await Promise.all([client.graphql('{a}'), client.graphql('{b}')]);
+    await client.graphql('{c}');
+    expect(t.sessionRequests).toHaveLength(1);
+  });
+
+  it('re-mints when the session is within five minutes of expiry', async () => {
+    const t = new FakeTransport(ok);
+    t.sessionPage = () => sessionPage('first', '2030-01-01T01:00:00Z');
+    let now = Date.parse('2030-01-01T00:00:00Z');
+    const client = new ToastClient(t, { now: () => now });
+    await client.graphql('{a}');
+    now = Date.parse('2030-01-01T00:54:00Z');
+    await client.graphql('{a}');
+    expect(t.sessionRequests).toHaveLength(1);
+    now = Date.parse('2030-01-01T00:56:00Z');
+    t.sessionPage = () => sessionPage('second', '2030-01-01T02:00:00Z');
+    await client.graphql('{a}');
+    expect(t.sessionRequests).toHaveLength(2);
+    expect(t.requests.at(-1)?.headers?.['toast-session-id']).toBe('second');
+  });
+
+  it('drops a session the gateway calls Forbidden and retries once with a fresh one', async () => {
+    let calls = 0;
+    const t = new FakeTransport(() => (++calls === 1 ? forbidden() : ok()));
+    let n = 0;
+    t.sessionPage = () => sessionPage(`s${++n}`);
+    expect(await new ToastClient(t).graphql('{__typename}')).toEqual({ data: { __typename: 'Query' }, errors: [] });
+    expect(t.requests.map((r) => r.headers?.['toast-session-id'])).toEqual(['s1', 's2']);
+  });
+
+  it('gives up after one fresh session is also Forbidden', async () => {
+    const t = new FakeTransport(forbidden);
+    await expect(new ToastClient(t).graphql('{a}')).rejects.toBeInstanceOf(ToastGraphqlError);
+    expect(t.requests).toHaveLength(2);
+  });
+
+  it('names a page without a session, and an edge block on the session page', async () => {
+    const t = new FakeTransport(ok);
+    t.sessionPage = () => ({ status: 404, url: 'u', body: '<html></html>' });
+    await expect(new ToastClient(t).graphql('{a}')).rejects.toThrow(/did not carry a guest session \(HTTP 404\)/);
+    expect(t.requests).toHaveLength(0);
+
+    t.sessionPage = () => ({
+      status: 403,
+      url: 'u',
+      body: '<!DOCTYPE html><html><head><title>Just a moment...</title></head><body><div id="challenge-platform"></div><script src="https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1"></script></body></html>',
+    });
+    await expect(new ToastClient(t).graphql('{a}')).rejects.toBeInstanceOf(ToastEdgeBlockedError);
+  });
+
+  it('lets a failed mint be retried by the next call', async () => {
+    const t = new FakeTransport(ok);
+    t.sessionPage = () => ({ status: 500, url: 'u', body: '' });
+    const client = new ToastClient(t);
+    await expect(client.graphql('{a}')).rejects.toThrow(/guest session/);
+    t.sessionPage = () => sessionPage();
+    await expect(client.graphql('{a}')).resolves.toMatchObject({ data: { __typename: 'Query' } });
   });
 });
 
