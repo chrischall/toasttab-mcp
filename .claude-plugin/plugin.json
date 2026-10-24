@@ -1,20 +1,22 @@
 {
-  "name": "ofw",
-  "displayName": "OurFamilyWizard",
-  "version": "2.20.6",
-  "description": "OurFamilyWizard co-parenting tools for Claude — messages, calendar, expenses, and journal via MCP",
+  "name": "toasttab-mcp",
+  "displayName": "Toast",
+  "version": "0.0.0",
+  "description": "Toast (toasttab.com) restaurants and menus for Claude — relays through a companion browser extension in your own browser.",
   "author": {
-    "name": "Chris Chall"
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
   },
-  "homepage": "https://github.com/chrischall/ofw-mcp",
-  "repository": "https://github.com/chrischall/ofw-mcp",
+  "homepage": "https://github.com/chrischall/toasttab-mcp",
+  "repository": "https://github.com/chrischall/toasttab-mcp",
   "license": "MIT",
   "keywords": [
-    "ofw",
-    "coparenting",
-    "ourFamilyWizard",
-    "mcp",
-    "family"
+    "toast",
+    "toasttab",
+    "restaurants",
+    "menus",
+    "takeout",
+    "mcp"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json"

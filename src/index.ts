@@ -1,67 +1,41 @@
 #!/usr/bin/env node
-const originalEmit = process.emit.bind(process);
-type EmitFn = (event: string | symbol, ...args: unknown[]) => boolean;
-(process.emit as EmitFn) = function (event: string | symbol, ...args: unknown[]): boolean {
-  if (event === 'warning') {
-    const w = args[0] as { name?: string; message?: string } | undefined;
-    if (w?.name === 'ExperimentalWarning' && /SQLite/i.test(w.message ?? '')) {
-      return false;
-    }
-  }
-  return (originalEmit as EmitFn)(event, ...args);
-};
-import { runMcp } from '@chrischall/mcp-utils';
-import { client } from './client.js';
-import { registerUserTools } from './tools/user.js';
+// toasttab-mcp entrypoint.
+//
+// Toast's diner-facing surfaces (order.toasttab.com and its GraphQL gateway)
+// sit behind Cloudflare, so every request rides the user's own browser through
+// the fetchproxy bridge: @fetchproxy/server listens on 127.0.0.1:37149 and the
+// ContextMint Bridge extension (installed separately) relays from a
+// toasttab.com tab.
+import { readEnvVar, runMcp } from '@chrischall/mcp-utils';
+import { ToastClient } from './client.js';
+import { FetchproxyTransport } from './transport-fetchproxy.js';
+import { registerRestaurantTools } from './tools/restaurants.js';
+import { registerMenuTools } from './tools/menus.js';
+import { registerGraphqlTools } from './tools/graphql.js';
 import { registerHealthcheckTools } from './tools/healthcheck.js';
-import { registerMessageTools } from './tools/messages.js';
-import { registerCalendarTools } from './tools/calendar.js';
-import { registerExpenseTools } from './tools/expenses.js';
-import { registerJournalTools } from './tools/journal.js';
-import { OFWCache } from './cache/node.js';
-import { getCacheDbPath } from './config.js';
-import { selectToolRegistrars } from './tool-surface.js';
-import { NodeAttachmentIO } from './tools/attachments.js';
-import type { CacheStore } from './cache/store.js';
 import { VERSION } from './version.js';
 
-// The stdio server backs the message cache with a local `node:sqlite` file,
-// opened lazily on first use (so the server still boots and answers the host's
-// install-time tools/list probe when no cache path is configured). Both the
-// CacheStore and the AttachmentIO are injected, so a deployment with no usable
-// disk supplies its own implementations to the same registrar instead.
-let nodeCache: CacheStore | undefined;
-const nodeCacheProvider = (): CacheStore => (nodeCache ??= OFWCache.open(getCacheDbPath()));
-const nodeAttachmentIO = new NodeAttachmentIO();
+const wsPort = readEnvVar('TOAST_WS_PORT');
+const transport = new FetchproxyTransport({ port: wsPort ? Number(wsPort) : undefined, version: VERSION });
 
-// runMcp builds the McpServer, applies the registrars (with `client` threaded
-// through as deps), prints the banner to stderr, wires SIGINT/SIGTERM graceful
-// shutdown, and connects the stdio transport. The deferred-config-error pattern
-// is preserved: `client` is constructed at module load in ./client.js (auth is
-// resolved lazily on the first tool call), so the host's initial tools/list
-// always succeeds before any credential check runs.
-const expenseRegistrar = (server: Parameters<typeof registerExpenseTools>[0], deps: typeof client) =>
-  registerExpenseTools(server, deps, nodeAttachmentIO);
-
-const messageRegistrar = (
-  server: Parameters<typeof registerMessageTools>[0],
-  deps: typeof client,
-) => registerMessageTools(server, deps, nodeCacheProvider, nodeAttachmentIO);
-
-const tools = selectToolRegistrars({
-  healthcheck: registerHealthcheckTools,
-  user: registerUserTools,
-  messages: messageRegistrar,
-  calendar: registerCalendarTools,
-  expenses: expenseRegistrar,
-  journal: registerJournalTools,
-});
+// Start before the server so tools/list always answers and the first tool
+// call is what surfaces a bridge problem.
+const client = new ToastClient(transport);
+await client.start();
 
 await runMcp({
-  name: 'ofw',
+  name: 'toasttab-mcp',
   version: VERSION,
-  deps: client,
-  tools,
   banner:
-    '[ofw-mcp] This project was developed and is maintained by AI (Claude Sonnet 4.6). Use at your own discretion.',
+    `[toasttab-mcp] v${VERSION} — WebSocket bridge via @fetchproxy/server on 127.0.0.1:${wsPort ?? 37149}. ` +
+    'Install the ContextMint Bridge extension (https://github.com/nullnet-app/contextmint-bridge/releases) and ' +
+    'keep an order.toasttab.com tab open. This server is built and maintained by AI (Claude Code); review before use.',
+  deps: client,
+  tools: [
+    registerRestaurantTools,
+    registerMenuTools,
+    registerGraphqlTools,
+    (server) => registerHealthcheckTools(server, client, transport),
+  ],
+  shutdown: { onSignal: () => client.close() },
 });

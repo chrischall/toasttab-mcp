@@ -1,378 +1,125 @@
-import {
-  EdgeBlockedError,
-  detectEdgeBlock,
-  loadDotenvSafely,
-  parseContentDispositionFilename,
-  parseBoolEnv,
-  redactSecrets,
-  withAmbientCancellation,
-} from '@chrischall/mcp-utils';
-import { TokenManager } from '@chrischall/mcp-utils/session';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { resolveAuth, type ResolvedAuth } from './auth.js';
-import { createSessionCache, reportCacheWriteFailure } from './session-cache.js';
-import { BASE_URL, OFW_PROTOCOL_HEADERS, OFW_TOKEN_TTL_MS, OFW_TOKEN_EXPIRY_SKEW_MS, assertOfwUrl } from './protocol.js';
+// ToastClient is the tool-facing API over a ToastTransport. Tools never see
+// HTTP: they ask for a GraphQL document and get back `data` plus any partial
+// errors, or a typed error that says what to do next.
+import { truncateErrorMessage, UpstreamHttpError } from '@chrischall/mcp-utils';
+import { classifyBotWall } from '@fetchproxy/server';
+import type { FetchResult, ToastHost, ToastTransport } from './transport.js';
 
-// Load .env for local dev; silently skip if dotenv is unavailable (e.g. mcpb
-// bundle). loadDotenvSafely applies override:false + quiet:true and swallows a
-// missing dotenv module. The try/catch additionally guards a runtime where
-// `import.meta.url` is undefined and `fileURLToPath(undefined)` would
-// otherwise throw at module init (a failure at
-// startup validation) — there is no filesystem / .env to load there anyway.
-try {
-  const dir = dirname(fileURLToPath(import.meta.url));
-  await loadDotenvSafely({ path: join(dir, '..', '.env') });
-} catch {
-  /* v8 ignore next -- only reached in a non-Node runtime: no .env to load */
-}
+export { UpstreamHttpError };
 
-export interface BinaryResponse {
-  body: Buffer;
-  contentType: string | null;
-  /** Parsed from Content-Disposition header if present. */
-  suggestedFileName: string | null;
-}
-
-// Set OFW_DEBUG_LOG=1 (or true/yes/on) to log every OFW request/response to
-// stderr. Authorization is redacted. Locally, bodies are logged in full — set
-// this only when debugging, never in normal use.
-function debugLogEnabled(): boolean {
-  return parseBoolEnv('OFW_DEBUG_LOG');
-}
-
-// On a hosted server (mcp-host injects MCP_DATA_DIR) stderr is captured by the
-// host's log pipeline, which the operator can read — so request and response
-// bodies (message text, drafts, expense ledgers) are replaced by their size.
-// Locally stderr is the user's own terminal and bodies stay visible.
-function debugBody(text: string): string {
-  if (process.env.MCP_DATA_DIR) return `<${text.length} chars, elided on a hosted server>`;
-  return text;
-}
-
-// Per-request timeout. Overridable via OFW_REQUEST_TIMEOUT_MS. The default
-// (30s) is comfortably above OFW's typical p99 but low enough that a stuck
-// upstream fails fast instead of burning the MCP client-side budget — which
-// is what produced the multi-minute hangs we've seen on ofw_list_messages
-// and ofw_save_draft. Each retry (401/429 replay) gets its own fresh window.
-const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-function getRequestTimeoutMs(): number {
-  const raw = process.env.OFW_REQUEST_TIMEOUT_MS;
-  if (typeof raw !== 'string' || raw.trim().length === 0) return DEFAULT_REQUEST_TIMEOUT_MS;
-  const n = Number(raw.trim());
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_REQUEST_TIMEOUT_MS;
-}
-
-// Sentinel "refresh token" handed to the shared TokenManager. OFW has no
-// OAuth-style refresh token — every renewal re-runs the full `resolveAuth()`
-// (password POST or fetchproxy snapshot). The TokenManager only refuses to
-// refresh when its refresh token is `undefined`, so a non-empty placeholder
-// keeps the single-flight refresh path live; the refresh callback ignores it.
-const OFW_REFRESH_SENTINEL = 'ofw';
+/** The online-ordering GraphQL gateway, on ws-api.toasttab.com. */
+export const GATEWAY_PATH = '/do-federated-gateway/v1/graphql';
 
 /**
- * Throw {@link EdgeBlockedError} when `response` is a CDN/WAF refusal.
- *
- * Its HEADERS are always judged (Cloudflare's `cf-mitigated`). Its BODY is
- * judged for a 401 or 429 before releasing it for a replay. A challenge page
- * without the header must not spend a login or be reported as a rate limit.
- * The 401 body is read from a clone (a final 401 still needs its error body);
- * the 429 body can be consumed directly since it is always released. JSON is
- * never probed — no refusal page is. Other non-2xx bodies are judged where
- * the error body is read anyway; a 2xx body is never consumed here.
+ * Cloudflare (or another edge) answered instead of Toast. From the browser
+ * this almost always means the bridged tab has not passed the site's check
+ * yet, so the remedy is the user's, not a retry loop's.
  */
-async function throwIfEdgeBlocked(response: Response, method: string, path: string): Promise<void> {
-  if (response.ok) return;
-  let edge = detectEdgeBlock({ headers: response.headers, status: response.status });
-  if (edge === null && (response.status === 401 || response.status === 429) && !/json/i.test(response.headers.get('content-type') ?? '')) {
-    let body = '';
-    try {
-      body = await (response.status === 401 ? response.clone() : response).text();
-    } catch {
-      /* unreadable: not shown to be a block */
-    }
-    edge = detectEdgeBlock({ body, headers: response.headers, status: response.status });
-  }
-  if (edge !== null) {
-    await releaseBody(response);
-    throw new EdgeBlockedError(response.status, edge.vendor, { service: 'OurFamilyWizard', method, path });
+export class ToastEdgeBlockedError extends Error {
+  constructor(readonly vendor: string, what: string) {
+    super(
+      `Toast's edge (${vendor}) refused ${what} before Toast saw it. Open https://order.toasttab.com ` +
+        'in the browser running the ContextMint Bridge extension, complete any "verify you are human" ' +
+        'check, then retry once. This is a block, not an empty result.',
+    );
+    this.name = 'ToastEdgeBlockedError';
   }
 }
 
-/**
- * Release a response's connection without reading it. A cancel that fails
- * changes nothing about the answer, so its failure is swallowed.
- */
-async function releaseBody(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch {
-    /* already settled */
+export interface GraphqlError {
+  message: string;
+  path?: unknown;
+  extensions?: unknown;
+}
+
+/** The gateway answered with errors and no data. */
+export class ToastGraphqlError extends Error {
+  constructor(readonly errors: GraphqlError[]) {
+    super(
+      errors.some((e) => e.message === 'Forbidden')
+        ? 'Toast\'s GraphQL gateway answered "Forbidden". It refuses requests that do not come from a ' +
+            'browser that has passed its edge check: open https://order.toasttab.com in the bridged ' +
+            'browser (any restaurant page), let it load, then retry.'
+        : `Toast GraphQL error: ${truncateErrorMessage(errors.map((e) => e.message).join('; '))}`,
+    );
+    this.name = 'ToastGraphqlError';
   }
 }
 
-/**
- * What `ofw_healthcheck` reports about the credential. Never the token itself.
- *
- * `source` is the path that minted the token this process holds, or `'cache'`
- * when it was restored from the session cache and no path ran at all.
- */
-export interface CredentialStatus {
-  source: ResolvedAuth['source'] | 'cache';
-  expiresAt: Date;
+export interface GraphqlResult<T> {
+  data: T;
+  /** Errors the gateway reported alongside partial data. Empty when clean. */
+  errors: GraphqlError[];
 }
 
-export class OFWClient {
-  // Bearer-token lifecycle is delegated to the shared, race-safe TokenManager
-  // (proactive refresh inside the skew window, single-flight refresh so a burst
-  // of concurrent callers coalesces onto ONE `resolveAuth()`, and a 401-replay
-  // guarded against double-refresh). It is created lazily, and mints on first
-  // use through the function form of `initial` — see `mint` below for why that
-  // form rather than a seeded placeholder.
-  private tokenManager: TokenManager | undefined;
+export interface GraphqlOptions {
+  variables?: Record<string, unknown>;
+  operationName?: string;
+}
 
-  // Optional injected auth resolver. When set, the refresh callback uses it
-  // instead of the module-level global `resolveAuth` (env-var → fetchproxy
-  // priority). A hosted per-user deployment injects its own resolver so each
-  // request carries that user's credentials — see the per-user
-  // deployment. Left undefined by the stdio path, which falls back to the
-  // global resolver, keeping that behaviour byte-for-byte identical.
-  private readonly authResolver: (() => Promise<ResolvedAuth>) | undefined;
+export class ToastClient {
+  constructor(private readonly transport: ToastTransport) {}
 
-  // Which path minted the token currently held. Unset while the token is one
-  // the TokenManager restored from the session cache — nothing was minted.
-  private mintedBy: ResolvedAuth['source'] | undefined;
-
-  constructor(opts?: { resolveAuth?: () => Promise<ResolvedAuth> }) {
-    this.authResolver = opts?.resolveAuth;
+  start(): Promise<void> {
+    return this.transport.start();
   }
 
-  private getTokenManager(): TokenManager {
-    if (!this.tokenManager) {
-      // Minting and renewing are the SAME operation here — OFW has no refresh
-      // grant — so one function serves as both `initial` and `refresh`. It has
-      // to be the function form: the eager object form skips persistence, so
-      // the expired placeholder that used to sit here would have meant the
-      // cache was written but never read.
-      const mint = async (): Promise<{
-        accessToken: string;
-        refreshToken: string;
-        expiresAt: number;
-      }> => {
-        const { token, expiresAt, source } = await (this.authResolver ?? resolveAuth)();
-        this.mintedBy = source;
-        return {
-          accessToken: token,
-          refreshToken: OFW_REFRESH_SENTINEL,
-          expiresAt: (expiresAt ?? new Date(Date.now() + OFW_TOKEN_TTL_MS)).getTime(),
-        };
-      };
-      this.tokenManager = new TokenManager({
-        initial: mint,
-        persistence:
-          createSessionCache({ injectedResolver: this.authResolver !== undefined }) ?? undefined,
-        onPersistError: reportCacheWriteFailure,
-        // A failed renewal IS a failed login here, so the library's
-        // re-mint-on-revoked recovery would just repeat the call that failed.
-        isRefreshRevoked: () => false,
-        skewMs: OFW_TOKEN_EXPIRY_SKEW_MS,
-        // Map OFW's mint/refresh onto the refresh callback. `resolveAuth()`
-        // returns a token and a best-effort expiry; when the fetchproxy path
-        // can't supply one we fall back to the same 6h estimate the password
-        // path uses (the 401-replay covers a wrong guess). We re-arm the
-        // sentinel so the manager can refresh again later.
-        refresh: mint,
-      });
-    }
-    return this.tokenManager;
+  close(): Promise<void> {
+    return this.transport.close();
   }
 
   /**
-   * The credential's source and expiry, answered from the TokenManager — the
-   * same token, cache and single-flight mint every tool uses.
+   * Run a GraphQL document against the gateway over GET.
    *
-   * `ofw_healthcheck` used to call `resolveAuth()` directly, which is a full
-   * login (or a fresh browser-bridge spin-up) on every healthcheck, ignoring
-   * the six-hour token already held. Going through the manager means a held or
-   * cached token costs nothing, and a mint, when one is needed, is the one the
-   * next real tool call would have made anyway. A mint failure propagates
-   * unchanged so the healthcheck can classify it.
+   * GET, not POST: the gateway refuses POST from outside Toast's own origin
+   * and answers the query in the query string (the third-party collector this
+   * repo's queries come from found the same). It also means a read can never
+   * be mistaken for a write by anything in between.
    */
-  async credentialStatus(): Promise<CredentialStatus> {
-    const tokens = this.getTokenManager();
-    await tokens.getAccessToken();
-    return { source: this.mintedBy ?? 'cache', expiresAt: new Date(tokens.getExpiresAt()) };
-  }
-
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    return this.fetchAuthed(method, path, body, 'application/json', async (response) => {
-      const text = await response.text();
-      if (debugLogEnabled()) {
-        console.error(`[ofw-debug] response body: ${text ? debugBody(text) : '<empty>'}`);
-      }
-      return (text ? JSON.parse(text) : null) as T;
-    });
-  }
-
-  /** Like `request`, but returns the raw bytes plus Content-Type/-Disposition metadata. */
-  async requestBinary(method: string, path: string): Promise<BinaryResponse> {
-    return this.fetchAuthed(method, path, undefined, 'application/octet-stream', async (response) => ({
-      body: Buffer.from(await response.arrayBuffer()),
-      contentType: response.headers.get('content-type'),
-      suggestedFileName: parseContentDispositionFilename(response.headers.get('content-disposition') ?? '') ?? null,
-    }));
-  }
-
-  // Authenticated fetch for both JSON and binary callers. Auth (proactive
-  // refresh inside the skew window + one 401-replay, guarded against a
-  // double-refresh under concurrency) is delegated to the shared TokenManager's
-  // `withAuth`. The 429 wait-and-replay and the non-2xx → throw remain here.
-  private async fetchAuthed<T>(
-    method: string,
-    path: string,
-    body: unknown,
-    accept: string,
-    consume: (response: Response) => Promise<T>,
-  ): Promise<T> {
-    let attempt = 0;
-    let result!: T;
-    // Keep all response I/O inside fetchOnce's per-attempt deadline. Returning
-    // the Response still lets TokenManager own its one 401 refresh/replay.
-    const call = async (retry: boolean): Promise<Response> => {
-      let authAttempt = 0;
-      return this.getTokenManager().withAuth((token) => {
-        const firstAuthAttempt = authAttempt++ === 0;
-        return this.fetchOnce(method, path, body, accept, token, async (response) => {
-          await throwIfEdgeBlocked(response, method, path);
-          if (response.status === 401 && firstAuthAttempt) {
-            await releaseBody(response);
-            return;
-          }
-          if (response.status === 429) {
-            await releaseBody(response);
-            return;
-          }
-          if (!response.ok) {
-            const errorBody = await response.text();
-            const edge = detectEdgeBlock({ body: errorBody, headers: response.headers, status: response.status });
-            if (edge !== null) {
-              throw new EdgeBlockedError(response.status, edge.vendor, { service: 'OurFamilyWizard', method, path });
-            }
-            const safeBody = redactSecrets(errorBody).replace(/\s+/g, ' ').trim().slice(0, 4000);
-            throw new Error(
-              `OFW API error: ${response.status} ${response.statusText} for ${method} ${path}` +
-              (safeBody ? ` — ${safeBody}` : ''),
-            );
-          }
-          result = await consume(response);
-        }, retry || attempt++ > 0);
-      });
-    };
-    const response = await call(false);
-    if (response.status === 429) {
-      // The attempt is released and its timer cleared before the backoff.
-      await new Promise<void>((r) => setTimeout(r, 2000));
-      if ((await call(true)).status === 429) {
-        throw new Error('Rate limited by OFW API');
-      }
+  async graphql<T = Record<string, unknown>>(document: string, opts: GraphqlOptions = {}): Promise<GraphqlResult<T>> {
+    const params = new URLSearchParams({ query: document });
+    if (opts.variables && Object.keys(opts.variables).length > 0) {
+      params.set('variables', JSON.stringify(opts.variables));
     }
-    return result;
-  }
-
-  // A single OFW API fetch with the bearer token supplied by `withAuth`.
-  // Carries the per-request timeout (AbortController + setTimeout so vitest
-  // fake timers can drive it and we attach a clear error message) and the
-  // OFW_DEBUG_LOG instrumentation. The handler completes body consumption or
-  // release before this attempt returns its Response to `withAuth`.
-  private async fetchOnce(
-    method: string,
-    path: string,
-    body: unknown,
-    accept: string,
-    token: string,
-    handleResponse: (response: Response) => Promise<void>,
-    isRetry = false,
-  ): Promise<Response> {
-    const isFormData = body instanceof FormData;
-    const headers: Record<string, string> = {
-      ...OFW_PROTOCOL_HEADERS,
-      Accept: accept,
-      Authorization: `Bearer ${token}`,
-    };
-    if (body !== undefined && !isFormData) headers['Content-Type'] = 'application/json';
-
-    const url = `${BASE_URL}${path}`;
-    // Egress allowlist — checked before the debug log, so a URL we refuse is
-    // never announced as outgoing.
-    assertOfwUrl(url);
-    if (debugLogEnabled()) {
-      const bodyPreview = body === undefined
-        ? '<none>'
-        : isFormData
-          ? `<FormData entries=${Array.from((body as FormData).keys()).join(',')}>`
-          : debugBody(JSON.stringify(body));
-      console.error(`[ofw-debug] → ${method} ${url}${isRetry ? ' (retry)' : ''}`);
-      // redactSecrets scrubs the Bearer token (and any other secret shapes)
-      // from the serialized header map — shared fleet redaction, never bespoke.
-      console.error(`[ofw-debug]   headers: ${redactSecrets(JSON.stringify(headers))}`);
-      console.error(`[ofw-debug]   body: ${bodyPreview}`);
-    }
-
-    // AbortController + setTimeout (not AbortSignal.timeout) so vitest fake
-    // timers can drive the timeout in tests, and so we can attach a clear
-    // error message instead of a bare DOMException on the abort path.
-    const timeoutMs = getRequestTimeoutMs();
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), timeoutMs);
-    const startedAt = Date.now();
-
-    // Passing our own signal guarantees a signal even without an ambient caller.
-    const signal = withAmbientCancellation(ac.signal)!;
-    let onAbort!: () => void;
-    // Race the complete attempt, not just fetch: body.cancel() may not settle
-    // on abort, and edge-probe/release helpers deliberately swallow I/O errors.
-    const aborted = new Promise<never>((_resolve, reject) => {
-      onAbort = () => reject(signal.reason);
-      if (signal.aborted) onAbort();
-      else signal.addEventListener('abort', onAbort, { once: true });
+    if (opts.operationName) params.set('operationName', opts.operationName);
+    const path = `${GATEWAY_PATH}?${params.toString()}`;
+    const result = await this.transport.fetch({
+      host: 'ws-api',
+      path,
+      method: 'GET',
+      headers: { Accept: 'application/json' },
     });
+    this.throwIfEdgeBlocked(result, 'the GraphQL request');
+
+    let payload: { data?: T | null; errors?: GraphqlError[] };
     try {
-      return await Promise.race([aborted, (async () => {
-        signal.throwIfAborted();
-        const response = await fetch(url, {
-          method,
-          headers,
-          // The caller's cancellation and our timeout both cover headers,
-          // body reads and releases; only our controller diagnoses slowness.
-          signal,
-          ...(body !== undefined ? { body: isFormData ? body : JSON.stringify(body) } : {}),
-        });
-        if (debugLogEnabled()) {
-          console.error(`[ofw-debug] ← ${response.status} ${response.statusText} (${Date.now() - startedAt}ms)`);
-        }
-        await handleResponse(response);
-        signal.throwIfAborted();
-        return response;
-      })()]);
-    } catch (err) {
-      const elapsed = Date.now() - startedAt;
-      if (ac.signal.aborted) {
-        if (debugLogEnabled()) {
-          console.error(`[ofw-debug] ⏱ TIMEOUT after ${elapsed}ms: ${method} ${url}`);
-        }
-        throw new Error(
-          `OFW API request timed out after ${timeoutMs}ms: ${method} ${path}`,
-        );
-      }
-      if (debugLogEnabled()) {
-        console.error(`[ofw-debug] ✗ ${(err as Error).message} after ${elapsed}ms: ${method} ${url}`);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', onAbort);
+      payload = JSON.parse(result.body) as typeof payload;
+    } catch {
+      throw new UpstreamHttpError(
+        result.status,
+        `Toast gateway returned non-JSON (HTTP ${result.status}): ${truncateErrorMessage(result.body.replace(/\s+/g, ' ').trim())}`,
+      );
     }
+    const errors = Array.isArray(payload.errors) ? payload.errors : [];
+    if (payload.data === undefined || payload.data === null) {
+      if (errors.length > 0) throw new ToastGraphqlError(errors);
+      throw new UpstreamHttpError(result.status, `Toast gateway returned no data (HTTP ${result.status}).`);
+    }
+    return { data: payload.data, errors };
+  }
+
+  /** GET a page on a toasttab.com host and return its body. */
+  async fetchText(host: ToastHost, path: string): Promise<string> {
+    const result = await this.transport.fetch({ host, path, method: 'GET' });
+    this.throwIfEdgeBlocked(result, `https://${host}.toasttab.com${path}`);
+    if (result.status < 200 || result.status >= 300) {
+      throw new UpstreamHttpError(result.status, `Toast returned HTTP ${result.status} for https://${host}.toasttab.com${path}`);
+    }
+    return result.body;
+  }
+
+  private throwIfEdgeBlocked(result: FetchResult, what: string): void {
+    const wall = classifyBotWall(result.body, result.status);
+    if (wall.blocked) throw new ToastEdgeBlockedError(wall.vendor, what);
   }
 }
-
-export const client = new OFWClient();

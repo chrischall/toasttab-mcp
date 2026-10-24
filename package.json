@@ -1,20 +1,31 @@
 {
-  "name": "ofw-mcp",
-  "version": "2.20.6",
-  "license": "MIT",
-  "mcpName": "io.github.chrischall/ofw-mcp",
-  "description": "OurFamilyWizard MCP server for Claude — developed and maintained by AI (Claude Code)",
+  "name": "toasttab-mcp",
+  "version": "0.0.0",
+  "mcpName": "io.github.chrischall/toasttab-mcp",
+  "description": "Toast (toasttab.com) restaurant + menu MCP server for Claude — developed and maintained by AI (Claude Code)",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chrischall/ofw-mcp.git"
+    "url": "git+https://github.com/chrischall/toasttab-mcp.git"
   },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "ai",
+    "toast",
+    "toasttab",
+    "restaurants",
+    "menus",
+    "takeout"
+  ],
   "type": "module",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.0.0"
   },
   "bin": {
-    "ofw-mcp": "dist/index.js"
+    "toasttab-mcp": "dist/bundle.js"
   },
   "files": [
     "dist",
@@ -25,19 +36,19 @@
     "mint.yaml"
   ],
   "scripts": {
-    "build": "tsc && npm run bundle",
-    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --external:dotenv --define:process.env.WS_NO_BUFFER_UTIL=true --define:process.env.WS_NO_UTF_8_VALIDATE=true --banner:js='import { createRequire as __createRequire } from \"module\"; const require = __createRequire(import.meta.url);' --outfile=dist/bundle.js",
-    "dev": "node --env-file=.env dist/index.js",
+    "build": "npm run typecheck && npm run bundle",
+    "bundle": "esbuild src/index.ts --bundle --alias:zod/v4=./node_modules/zod/v4/index.cjs --define:process.env.FETCHPROXY_WS_PORT=undefined --define:process.env.WS_NO_BUFFER_UTIL='\"1\"' --define:process.env.WS_NO_UTF_8_VALIDATE='\"1\"' --platform=node --format=esm --external:dotenv --banner:js='import { createRequire as __createRequire } from \"module\"; const require = __createRequire(import.meta.url);' --outfile=dist/bundle.js",
+    "dev": "node dist/bundle.js",
     "test": "npm run typecheck && vitest run",
-    "test:coverage": "npm run typecheck && vitest run --coverage",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:coverage": "npm run typecheck && vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.check.json"
   },
   "dependencies": {
     "@chrischall/mcp-utils": "^3.1.0",
-    "@fetchproxy/bootstrap": "^3.6.2",
+    "@fetchproxy/server": "^3.6.2",
     "@modelcontextprotocol/server": "^2.3.0",
-    "dotenv": "^18.0.0",
+    "dotenv": "^18.0.2",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -45,6 +56,7 @@
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^5.0.0",
     "esbuild": "^0.28.0",
+    "tsx": "^4.19.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   },

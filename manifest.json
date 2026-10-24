@@ -1,30 +1,28 @@
 {
   "$schema": "https://raw.githubusercontent.com/anthropics/dxt/main/dist/mcpb-manifest.schema.json",
   "manifest_version": "0.3",
-  "name": "ofw-mcp",
-  "display_name": "OurFamilyWizard",
-  "version": "2.20.6",
-  "description": "OurFamilyWizard co-parenting tools for Claude — messages, calendar, expenses, and journal",
+  "name": "toasttab-mcp",
+  "display_name": "Toast",
+  "version": "0.0.0",
+  "description": "Toast (toasttab.com) for Claude — find restaurants that order through Toast near a point, resolve ordering links, and read their online or full register menus, with a read-only GraphQL explorer. Relays every request through the ContextMint Bridge browser extension (github.com/nullnet-app/contextmint-bridge) in your own browser, so Toast's Cloudflare check is passed by you, not bypassed.",
   "author": {
-    "name": "Chris Chall",
+    "name": "Chris Hall",
     "email": "chris.c.hall@gmail.com",
     "url": "https://github.com/chrischall"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/chrischall/ofw-mcp"
+    "url": "https://github.com/chrischall/toasttab-mcp"
   },
-  "homepage": "https://github.com/chrischall/ofw-mcp",
-  "support": "https://github.com/chrischall/ofw-mcp/issues",
+  "homepage": "https://github.com/chrischall/toasttab-mcp",
+  "support": "https://github.com/chrischall/toasttab-mcp/issues",
   "license": "MIT",
   "keywords": [
-    "ofw",
-    "coparenting",
-    "ourFamilyWizard",
-    "family",
-    "messages",
-    "calendar",
-    "expenses"
+    "toast",
+    "toasttab",
+    "restaurants",
+    "menus",
+    "takeout"
   ],
   "server": {
     "type": "node",
@@ -35,319 +33,62 @@
         "${__dirname}/dist/bundle.js"
       ],
       "env": {
-        "OFW_USERNAME": "${user_config.ofw_username}",
-        "OFW_PASSWORD": "${user_config.ofw_password}",
-        "OFW_INLINE_ATTACHMENTS": "${user_config.ofw_inline_attachments}",
-        "OFW_ATTACHMENTS_DIR": "${user_config.ofw_attachments_dir}",
-        "OFW_UPLOAD_DIR": "${user_config.ofw_upload_dir}",
-        "OFW_WRITE_MODE": "${user_config.ofw_write_mode}",
-        "OFW_CALENDAR_WRITES": "${user_config.ofw_calendar_writes}",
-        "OFW_ALLOW_MARK_READ": "${user_config.ofw_allow_mark_read}",
-        "OFW_FETCH_UNREAD_BODIES": "${user_config.ofw_fetch_unread_bodies}",
-        "OFW_EXPENSE_ONLY": "${user_config.ofw_expense_only}",
-        "OFW_EXPENSE_UPLOAD_ONLY": "${user_config.ofw_expense_upload_only}",
-        "OFW_CACHE_IDENTITY": "${user_config.ofw_cache_identity}",
-        "OFW_CACHE_DIR": "${user_config.ofw_cache_dir}",
-        "OFW_DISABLE_FETCHPROXY": "${user_config.ofw_disable_fetchproxy}",
-        "OFW_SESSION_CACHE": "${user_config.ofw_session_cache}",
-        "OFW_SESSION_FILE": "${user_config.ofw_session_file}",
-        "OFW_AUTO_REFRESH": "${user_config.ofw_auto_refresh}",
-        "OFW_FRESHNESS_TTL_SECONDS": "${user_config.ofw_freshness_ttl_seconds}",
-        "OFW_SYNC_MAX_REQUESTS": "${user_config.ofw_sync_max_requests}",
-        "OFW_REQUEST_TIMEOUT_MS": "${user_config.ofw_request_timeout_ms}",
-        "OFW_DEBUG_LOG": "${user_config.ofw_debug_log}",
-        "DISPLAY_TZ": "${user_config.display_tz}",
-        "FETCHPROXY_WS_PORT": "${user_config.fetchproxy_ws_port}",
+        "TOAST_WS_PORT": "${user_config.ws_port}",
         "FETCHPROXY_WS_HOST": "${user_config.fetchproxy_ws_host}",
         "FETCHPROXY_IDENTITY_DIR": "${user_config.fetchproxy_identity_dir}"
       }
     }
   },
   "user_config": {
-    "ofw_username": {
+    "ws_port": {
       "type": "string",
-      "title": "OFW Email",
-      "description": "Your OurFamilyWizard login email address. Optional — if omitted, the server falls back to the fetchproxy browser extension (requires being signed in to ourfamilywizard.com in your browser).",
-      "required": false
-    },
-    "ofw_password": {
-      "type": "string",
-      "title": "OFW Password",
-      "description": "Your OurFamilyWizard password. Optional — see ofw_username.",
-      "required": false,
-      "sensitive": true
-    },
-    "ofw_inline_attachments": {
-      "type": "boolean",
-      "title": "Return attachments inline",
-      "description": "When on, ofw_download_attachment returns bytes inline as MCP content (images render directly; other files come back as embedded resources) instead of writing to disk. Recommended for sandboxed hosts like Claude Desktop where the model cannot read files written to ~/Downloads. Callers can still override per-call via the tool's `inline` argument.",
-      "required": false,
-      "default": false
-    },
-    "ofw_attachments_dir": {
-      "type": "directory",
-      "title": "Attachments download directory",
-      "description": "Directory where ofw_download_attachment writes files when not returning inline. Defaults to ~/Downloads/ofw-mcp/. Pick a directory that is readable by your MCP host. Downloads can only be written inside it.",
-      "required": false
-    },
-    "ofw_upload_dir": {
-      "type": "directory",
-      "title": "Upload source directory",
-      "description": "The only directory ofw_upload_attachment may upload files from (hidden files excluded). Defaults to the attachments download directory. Put files you want to send to OurFamilyWizard here.",
-      "required": false
-    },
-    "ofw_write_mode": {
-      "type": "string",
-      "title": "Write mode",
-      "description": "Structural write gate. \"none\" = no write tools registered (read/sync/search only); \"drafts\" = draft-level writes only (save/delete drafts, upload attachments — never send or calendar/expense/journal writes); \"all\" = everything (default). Unrecognized values fail closed to \"none\".",
-      "required": false,
-      "default": "all"
-    },
-    "ofw_calendar_writes": {
-      "type": "boolean",
-      "title": "Calendar writes in drafts mode",
-      "description": "When Write mode is \"drafts\", also register the calendar write tools (create/update/delete event). Calendar events have no draft stage but are reversible (editable/deletable), unlike a sent message. Redundant in \"all\"; never overrides \"none\".",
-      "required": false,
-      "default": false
-    },
-    "ofw_allow_mark_read": {
-      "type": "boolean",
-      "title": "Allow marking messages read",
-      "description": "Reading a message body for the first time marks it READ on OurFamilyWizard and stamps a \"First Viewed\" time your co-parent can see - part of the record, and irreversible. Leave on for the long-standing behaviour; turn off to forbid it entirely (no per-call argument can override).",
-      "required": false,
-      "default": true
-    },
-    "ofw_fetch_unread_bodies": {
-      "type": "boolean",
-      "title": "Sync unread message bodies",
-      "description": "Whether a sync also downloads unread inbox bodies by default. Each one stamps a \"First Viewed\" time. Off by default; ignored when \"Allow marking messages read\" is off.",
-      "required": false,
-      "default": false
-    },
-    "ofw_expense_only": {
-      "type": "boolean",
-      "title": "Expense-only mode",
-      "description": "Structural restriction: register only healthcheck plus expense tools. Removes profile/dashboard, messages, calendar, and journal tools entirely.",
-      "required": false,
-      "default": false
-    },
-    "ofw_expense_upload_only": {
-      "type": "boolean",
-      "title": "Expense upload-only mode",
-      "description": "Strict structural restriction: register only healthcheck, ofw_upload_expense_pdf, ofw_create_expense, and ofw_update_expense. Implies Expense-only mode and removes expense reads too.",
-      "required": false,
-      "default": false
-    },
-    "ofw_cache_identity": {
-      "type": "string",
-      "title": "Cache identity label (advanced)",
-      "description": "Explicit cache-key label; overrides OFW_USERNAME for fetchproxy-only multi-account setups. If you have multiple OFW accounts and want them to use separate caches, set it to a label per profile.",
-      "required": false
-    },
-    "ofw_cache_dir": {
-      "type": "directory",
-      "title": "Message cache directory (advanced)",
-      "description": "Overrides the message cache directory (default ~/.cache/ofw-mcp).",
-      "required": false
-    },
-    "ofw_disable_fetchproxy": {
-      "type": "boolean",
-      "title": "Disable browser bridge (advanced)",
-      "description": "Skip the fetchproxy fallback, so missing credentials become a hard error (useful in headless CI).",
-      "required": false,
-      "default": false
-    },
-    "ofw_session_cache": {
-      "type": "boolean",
-      "title": "Cache the session between runs",
-      "description": "Cache the OFW session between runs (default on). Turn off and a restart re-authenticates every time.",
-      "required": false,
-      "default": true
-    },
-    "ofw_session_file": {
-      "type": "string",
-      "title": "Session cache file (advanced)",
-      "description": "Absolute path for the session cache file. Defaults to $MCP_DATA_DIR/.ofw-mcp/session.json.",
-      "required": false
-    },
-    "ofw_auto_refresh": {
-      "type": "boolean",
-      "title": "Auto-refresh empty stale reads",
-      "description": "When a cached read comes back EMPTY from a non-fresh cache, the read tools sync the backing folders and answer from the refreshed cache instead of refusing with UNVERIFIED_EMPTY (default off, i.e. refuse). Per-call autoRefresh overrides it. A refresh that does not make the read verifiable still refuses.",
-      "required": false,
-      "default": false
-    },
-    "ofw_freshness_ttl_seconds": {
-      "type": "string",
-      "title": "Freshness window in seconds (advanced)",
-      "description": "How long a verified-against-OFW folder stays labelled `fresh` in read tools' `freshness` block (default 300). Unusable values fall back to the default — a typo must never widen the window in which stale data reads as current.",
-      "required": false
-    },
-    "ofw_sync_max_requests": {
-      "type": "string",
-      "title": "Sync request budget (advanced)",
-      "description": "Per-call OFW-request budget for ofw_sync_messages: a positive integer caps how many OFW requests one sync call may make before pausing; the next call resumes where it left off. Unset means unbounded (local installs walk fully in one call).",
-      "required": false
-    },
-    "ofw_request_timeout_ms": {
-      "type": "string",
-      "title": "Request timeout in ms (advanced)",
-      "description": "Per-request timeout for OFW API calls, in milliseconds (default 30000). Each retry gets its own fresh window.",
-      "required": false
-    },
-    "ofw_debug_log": {
-      "type": "boolean",
-      "title": "Debug logging (diagnostic)",
-      "description": "Log every OFW request/response to stderr (Authorization redacted). Diagnostic only.",
-      "required": false,
-      "default": false
-    },
-    "display_tz": {
-      "type": "string",
-      "title": "Display time zone",
-      "description": "IANA zone (e.g. America/New_York, the default) for every `<field>Display` value, and the zone a NAIVE source timestamp is assumed to be wall-clock in. OFW's API reports naive local times in the account's own zone, so this must match it. Unrecognized values fall back to the default.",
-      "required": false
-    },
-    "fetchproxy_ws_port": {
-      "type": "string",
-      "title": "fetchproxy port (advanced)",
-      "description": "Localhost port of the fetchproxy concentrator the ContextMint Bridge extension connects to (default 37149). Every MCP on one machine shares it, so move it for all of them or not at all.",
+      "title": "Bridge WebSocket port",
+      "description": "Optional. Overrides the fetchproxy WebSocket port (default 37149, the fleet-shared port). Leave blank for the default.",
       "required": false
     },
     "fetchproxy_ws_host": {
       "type": "string",
-      "title": "fetchproxy bind address (advanced)",
-      "description": "Bind interface for the fetchproxy concentrator, a literal IP only (default 127.0.0.1). Keep on loopback; it exists for hosted deployments that run each MCP in its own network namespace.",
+      "title": "Bridge bind interface (hosted only)",
+      "description": "Optional. Bridge bind interface, a literal IP only (anything else is ignored); default 127.0.0.1. Keep on loopback — it exists for a hosted child in its own network namespace. Leave blank for the default.",
       "required": false
     },
     "fetchproxy_identity_dir": {
       "type": "string",
-      "title": "fetchproxy identity directory (advanced)",
-      "description": "Absolute path where the fetchproxy long-term identity keypair is stored (default ~/.fetchproxy/identity/).",
+      "title": "Bridge identity directory (hosted only)",
+      "description": "Optional. Where to store the long-term bridge identity keypair, an absolute path only (anything else is ignored); default ~/.fetchproxy/identity/. Exists for a host that runs a separate child per caller. Leave blank for the default.",
       "required": false
     }
   },
   "tools": [
     {
-      "name": "ofw_get_profile",
-      "description": "Get current user and co-parent info"
+      "name": "toast_find_restaurants",
+      "description": "Find restaurants that order through Toast near a latitude/longitude."
     },
     {
-      "name": "ofw_get_notifications",
-      "description": "Get dashboard summary: unread messages, upcoming events, outstanding expenses"
+      "name": "toast_resolve_restaurant",
+      "description": "Turn a Toast link, shortUrl or GUID into the restaurant GUID."
     },
     {
-      "name": "ofw_list_message_folders",
-      "description": "List message folders and unread counts"
+      "name": "toast_get_menu",
+      "description": "Read a Toast restaurant's online or register menu, with search."
     },
     {
-      "name": "ofw_list_messages",
-      "description": "List messages in a folder"
+      "name": "toast_graphql",
+      "description": "Run a read-only GraphQL query against Toast's ordering gateway."
     },
     {
-      "name": "ofw_get_message",
-      "description": "Read a message by ID"
-    },
-    {
-      "name": "ofw_send_message",
-      "description": "Send a message (confirmed first, with a preview of recipients, subject and body)"
-    },
-    {
-      "name": "ofw_list_drafts",
-      "description": "List draft messages"
-    },
-    {
-      "name": "ofw_save_draft",
-      "description": "Create or update a draft"
-    },
-    {
-      "name": "ofw_delete_draft",
-      "description": "Delete a draft"
-    },
-    {
-      "name": "ofw_get_unread_sent",
-      "description": "List sent messages the co-parent has not yet viewed"
-    },
-    {
-      "name": "ofw_upload_attachment",
-      "description": "Upload a file from disk to use as an attachment on a message or draft (sharing it with the co-parent is confirmed first)"
-    },
-    {
-      "name": "ofw_download_attachment",
-      "description": "Download a message attachment by fileId — returns bytes inline or writes to disk"
-    },
-    {
-      "name": "ofw_sync_messages",
-      "description": "Sync messages from OFW into local cache"
-    },
-    {
-      "name": "ofw_list_events",
-      "description": "List calendar events in a date range"
-    },
-    {
-      "name": "ofw_create_event",
-      "description": "Create a calendar event (a shared one is confirmed first)"
-    },
-    {
-      "name": "ofw_update_event",
-      "description": "Update a calendar event (a shared one is confirmed first)"
-    },
-    {
-      "name": "ofw_delete_event",
-      "description": "Delete a calendar event (a shared one is confirmed first)"
-    },
-    {
-      "name": "ofw_get_expense_totals",
-      "description": "Get expense summary totals"
-    },
-    {
-      "name": "ofw_list_expenses",
-      "description": "List expenses"
-    },
-    {
-      "name": "ofw_upload_expense_pdf",
-      "description": "Upload a receipt PDF to OFW My Files, SHARED so it can be attached to an expense (co-parent-visible; confirmed first)"
-    },
-    {
-      "name": "ofw_list_expense_categories",
-      "description": "List expense categories (preset and custom) with their split metadata"
-    },
-    {
-      "name": "ofw_update_expense",
-      "description": "Change an existing expense, e.g. publish a private one; pass only the fields to change and the rest are kept (confirmed first)"
-    },
-    {
-      "name": "ofw_create_expense",
-      "description": "Log a new expense, optionally private and with one receipt PDF (confirmed first, with a preview of amount and title)"
-    },
-    {
-      "name": "ofw_list_journal_entries",
-      "description": "List journal entries"
-    },
-    {
-      "name": "ofw_create_journal_entry",
-      "description": "Create a journal entry"
-    },
-    {
-      "name": "ofw_healthcheck",
-      "description": "Report whether the OFW credential resolved and the API accepted it, and what to fix if not"
-    },
-    {
-      "name": "ofw_check_freshness",
-      "description": "Cheaply re-verify message/draft ids against OFW — live lifecycle state and content-hash comparison, no bodies fetched"
-    },
-    {
-      "name": "ofw_status",
-      "description": "Server-verified draft inventory and live lifecycle state for given ids or draft keys, in one round trip"
+      "name": "toast_healthcheck",
+      "description": "Check the browser bridge and Toast gateway end to end."
     }
   ],
   "compatibility": {
     "platforms": [
       "darwin",
-      "win32"
+      "win32",
+      "linux"
     ],
     "runtimes": {
-      "node": ">=22.5.0"
+      "node": ">=22.0.0"
     }
   }
 }
