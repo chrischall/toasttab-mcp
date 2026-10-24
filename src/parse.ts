@@ -15,7 +15,7 @@ const obj = (v: unknown): Record<string, unknown> =>
 // Restaurants
 
 /** `nearbyRestaurants` answers at most this many rows; a full page may be truncated. */
-export const NEARBY_PAGE_CAP = 299;
+export const NEARBY_PAGE_CAP = 300;
 
 export interface Restaurant {
   guid: string | null;
@@ -62,6 +62,22 @@ export function nameMatches(name: string | null, query: string): boolean {
     s.toLowerCase().normalize('NFKD').replace(/['\u2019]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   const q = norm(query);
   return q === '' || norm(name).includes(q);
+}
+
+/** `__typename` of a union answer, or null. */
+export function typenameOf(raw: unknown): string | null {
+  return str(obj(raw).__typename);
+}
+
+/**
+ * The `Restaurant` arm of `restaurantV2ByShortUrl`, or null for any other arm
+ * (`GeneralError` for an unknown slug) or a row without a GUID.
+ */
+export function readRestaurantByShortUrl(raw: unknown): { guid: string; name: string | null; short_url: string | null } | null {
+  const r = obj(raw);
+  const guid = str(r.guid);
+  if (r.__typename !== 'Restaurant' || !guid) return null;
+  return { guid, name: str(r.name), short_url: str(r.shortUrl) };
 }
 
 // ---------------------------------------------------------------------------

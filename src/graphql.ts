@@ -1,23 +1,23 @@
 // GraphQL documents for Toast's online-ordering gateway, plus the read-only
 // guard `toast_graphql` relies on.
 //
-// Provenance — read this before adding a field. Nothing here has been
-// live-verified FROM THIS REPO: the gateway refuses non-browser clients (see
-// transport-fetchproxy.ts), and no capture was possible when this file was
-// written. The two operations below are the ones a public third-party collector
-// (github.com/tylerherman19/Coffee, PR #10) runs against the same gateway over
-// GET, with exactly these arguments and selections. A field that is not in that
-// set is a guess, and a guessed field fails the WHOLE query with a validation
-// error — so extend a selection only after `toast_graphql` has shown the field
-// exists.
+// Provenance — read this before adding a field. `nearbyRestaurants` and
+// `menusV3` were first taken from a public third-party collector
+// (github.com/tylerherman19/Coffee, PR #10); every selection below was then
+// run live from this repo on 2026-10-24 through a bridged order.toasttab.com
+// tab and answered as written. `restaurantV2ByShortUrl` is the operation the
+// ordering page's own server-rendered Apollo state names. Introspection is
+// disabled on the gateway, so a field outside these selections is still a
+// guess, and a guessed field fails the WHOLE query with a validation error —
+// extend a selection only after `toast_graphql` has shown the field exists.
 //
 // Arguments are inlined as literals rather than passed as `$variables` because
-// a variable needs its input TYPE name (`NearbyRestaurantsInput`?), which is
-// not known. Inlining is safe: strings go through JSON.stringify (GraphQL
-// string escapes are a superset-compatible subset of JSON's), numbers are
-// checked finite, and enums come from a closed list.
+// a variable needs its input TYPE name, which introspection would have told us.
+// Inlining is safe: strings go through JSON.stringify (GraphQL string escapes
+// are a superset-compatible subset of JSON's), numbers are checked finite, and
+// enums come from a closed list.
 
-/** Dining options the restaurant directory accepts. TAKE_OUT is the observed one. */
+/** Dining options the restaurant directory accepts. Both verified live; DELIVERY returns a subset. */
 export const DINING_OPTIONS = ['TAKE_OUT', 'DELIVERY'] as const;
 export type DiningOption = (typeof DINING_OPTIONS)[number];
 
@@ -59,6 +59,15 @@ export function nearbyRestaurantsQuery(args: NearbyRestaurantsArgs): string {
     `latitude:${gqlNumber(args.latitude)},longitude:${gqlNumber(args.longitude)},` +
     `radius:${gqlNumber(args.radiusMiles)}}){${RESTAURANT_SELECTION}}}`
   );
+}
+
+/**
+ * Look a restaurant up by its shortUrl slug. The field returns a union
+ * (`RestaurantOrError`): a known slug is a `Restaurant`, an unknown one a
+ * `GeneralError` with no further fields.
+ */
+export function restaurantByShortUrlQuery(shortUrl: string): string {
+  return `{restaurantV2ByShortUrl(shortUrl:${gqlString(shortUrl)}){__typename ... on Restaurant{guid name shortUrl}}}`;
 }
 
 export const MENU_ITEM_SELECTION = 'guid name description price prices outOfStock';

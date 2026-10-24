@@ -37,11 +37,11 @@ describe('toast_find_restaurants', () => {
     expect(res).toMatchObject({ total: 1, returned: 1, warnings: ['one shard down'] });
   });
 
-  it('warns when the 299-row cap was hit', async () => {
-    const many = Array.from({ length: 299 }, (_, i) => ({ ...ROWS[0], guid: `g${i}` }));
+  it('warns when the 300-row cap was hit', async () => {
+    const many = Array.from({ length: 300 }, (_, i) => ({ ...ROWS[0], guid: `g${i}` }));
     const t = new FakeTransport(() => json({ data: { nearbyRestaurants: many } }));
     const res = parseToolResult<{ note?: string }>(await (await harness(t)).callTool('toast_find_restaurants', { latitude: 35, longitude: -80 }));
-    expect(res.note).toMatch(/299-row maximum/);
+    expect(res.note).toMatch(/300-row maximum/);
   });
 
   it('view full returns the raw data', async () => {
@@ -65,43 +65,31 @@ describe('toast_resolve_restaurant', () => {
     expect(res).toEqual({ guid: GUID_A, short_url: null, resolved_by: 'reference' });
   });
 
-  it('finds a shortUrl in the directory near a point', async () => {
-    const t = new FakeTransport(() => json({ data: { nearbyRestaurants: ROWS } }));
-    const res = parseToolResult<{ guid: string; resolved_by: string }>(
-      await (await harness(t)).callTool('toast_resolve_restaurant', { reference: 'https://order.toasttab.com/online/joes-pizza', latitude: 35.2271, longitude: -80.8431 }),
+  it('looks a shortUrl up with restaurantV2ByShortUrl', async () => {
+    const t = new FakeTransport(() =>
+      json({ data: { restaurantV2ByShortUrl: { __typename: 'Restaurant', guid: GUID_A, name: "Joe's Pizza", shortUrl: 'joes-pizza' } } }),
     );
-    expect(res).toMatchObject({ guid: GUID_A, resolved_by: 'directory' });
-    expect(t.requests).toHaveLength(1);
+    const res = parseToolResult(
+      await (await harness(t)).callTool('toast_resolve_restaurant', { reference: 'https://order.toasttab.com/online/joes-pizza' }),
+    );
+    expect(res).toEqual({ guid: GUID_A, short_url: 'joes-pizza', name: "Joe's Pizza", resolved_by: 'short_url' });
+    expect(t.queries).toEqual([
+      '{restaurantV2ByShortUrl(shortUrl:"joes-pizza"){__typename ... on Restaurant{guid name shortUrl}}}',
+    ]);
   });
 
-  it('retries the directory 12h later, then falls back to the ordering page', async () => {
-    const t = new FakeTransport((init) =>
-      init.host === 'order'
-        ? { status: 200, url: 'u', body: `<script>window.__S={"restaurantGuid":"${GUID_A}"}</script>` }
-        : json({ data: { nearbyRestaurants: [] } }),
-    );
-    const res = parseToolResult<{ guid: string; resolved_by: string }>(
-      await (await harness(t)).callTool('toast_resolve_restaurant', { reference: 'joes-pizza', latitude: 35, longitude: -80 }),
-    );
-    expect(res).toMatchObject({ guid: GUID_A, resolved_by: 'ordering_page' });
-    expect(t.requests.map((r) => r.host)).toEqual(['ws-api', 'ws-api', 'order']);
-    expect(t.requests[2].path).toBe('/online/joes-pizza');
-  });
-
-  it('refuses latitude without longitude instead of silently skipping the directory', async () => {
-    const t = new FakeTransport(() => json({ data: {} }));
-    const res = await (await harness(t)).callTool('toast_resolve_restaurant', { reference: 'joes-pizza', latitude: 35 });
-    expect(res.isError).toBe(true);
-    expect(JSON.stringify(res.content)).toMatch(/latitude and longitude together/);
-    expect(t.requests).toHaveLength(0);
-  });
-
-  it('says what to do when nothing resolves', async () => {
-    const t = new FakeTransport(() => ({ status: 200, url: 'u', body: '<html></html>' }));
-    const res = parseToolResult<{ guid: null; next_step: string }>(
+  it("reports Toast's GeneralError for an unknown slug as unresolved, with a next step", async () => {
+    const t = new FakeTransport(() => json({ data: { restaurantV2ByShortUrl: { __typename: 'GeneralError' } } }));
+    const res = parseToolResult<{ guid: null; toast_answer: string; next_step: string }>(
       await (await harness(t)).callTool('toast_resolve_restaurant', { reference: 'joes-pizza' }),
     );
+    expect(res).toMatchObject({ guid: null, short_url: 'joes-pizza', resolved_by: null, toast_answer: 'GeneralError' });
+    expect(res.next_step).toMatch(/toast_find_restaurants/);
+  });
+
+  it('does not trust a Restaurant arm without a GUID', async () => {
+    const t = new FakeTransport(() => json({ data: { restaurantV2ByShortUrl: { __typename: 'Restaurant', guid: null } } }));
+    const res = parseToolResult<{ guid: null }>(await (await harness(t)).callTool('toast_resolve_restaurant', { reference: 'joes-pizza' }));
     expect(res.guid).toBeNull();
-    expect(res.next_step).toMatch(/latitude\/longitude/);
   });
 });

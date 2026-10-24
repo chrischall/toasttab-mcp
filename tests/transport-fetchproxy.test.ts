@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FetchproxyNoTabError } from '@fetchproxy/server';
-import { API_RELAY_TABS, FetchproxyTransport } from '../src/transport-fetchproxy.js';
+import { API_RELAY_TAB, FetchproxyTransport } from '../src/transport-fetchproxy.js';
 
 type RequestFn = (method: string, path: string, opts: Record<string, unknown>) => Promise<{ status: number; body: string; url: string }>;
 
@@ -17,21 +17,13 @@ describe('FetchproxyTransport.fetch', () => {
   it('relays API requests through an ordering tab', async () => {
     const { t, request } = withRequest(async () => ok);
     await t.fetch({ host: 'ws-api', path: '/p', method: 'GET' });
-    expect(request).toHaveBeenCalledWith('GET', '/p', expect.objectContaining({ subdomain: 'ws-api', viaTab: API_RELAY_TABS[0] }));
+    expect(request).toHaveBeenCalledWith('GET', '/p', expect.objectContaining({ subdomain: 'ws-api', viaTab: API_RELAY_TAB }));
   });
 
-  it('falls through to the next relay tab only on a missing tab', async () => {
-    const { t, request } = withRequest(async (_m, _p, opts) => {
-      if (opts.viaTab === API_RELAY_TABS[0]) throw new FetchproxyNoTabError('no tab');
-      return ok;
-    });
-    await t.fetch({ host: 'ws-api', path: '/p', method: 'GET' });
-    expect(request.mock.calls.map((c) => c[2].viaTab)).toEqual([...API_RELAY_TABS]);
-  });
-
-  it('explains what to open when no relay tab exists', async () => {
+  it('explains what to open when no ordering tab exists, for the API host and the page host alike', async () => {
     const { t } = withRequest(async () => { throw new FetchproxyNoTabError('no tab'); });
-    await expect(t.fetch({ host: 'ws-api', path: '/p', method: 'GET' })).rejects.toThrow(/Open https:\/\/order\.toasttab\.com/);
+    await expect(t.fetch({ host: 'ws-api', path: '/p', method: 'GET' })).rejects.toThrow(/order\.toasttab\.com\/online/);
+    await expect(t.fetch({ host: 'order', path: '/online/x', method: 'GET' })).rejects.toThrow(/order\.toasttab\.com\/online/);
   });
 
   it('rethrows other bridge errors at once', async () => {

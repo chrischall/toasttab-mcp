@@ -76,21 +76,6 @@ export function orderingUrl(shortUrl: string): string {
   return `https://order.toasttab.com/online/${encodeURIComponent(shortUrl)}`;
 }
 
-/**
- * Pull the restaurant GUID out of an ordering page's HTML.
- *
- * Unverified shape, so deliberately strict: only values under a
- * `restaurantGuid` key count, and the page must name exactly ONE distinct
- * GUID that way. Zero or several returns null — a page that lists a sister
- * location must never resolve to the wrong restaurant.
- */
-export function guidFromOrderingPage(html: string): string | null {
-  const pattern = new RegExp(`\\\\?["']restaurantGuid\\\\?["']\\s*:\\s*\\\\?["'](${GUID})\\\\?["']`, 'gi');
-  const found = new Set<string>();
-  for (const m of html.matchAll(pattern)) found.add(m[1].toLowerCase());
-  return found.size === 1 ? [...found][0] : null;
-}
-
 /** Great-circle distance in miles. */
 export function milesBetween(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const rad = (d: number) => (d * Math.PI) / 180;

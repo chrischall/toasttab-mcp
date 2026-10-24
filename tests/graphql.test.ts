@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { assertReadOnlyDocument, gqlNumber, gqlString, menusQuery, nearbyRestaurantsQuery } from '../src/graphql.js';
+import { assertReadOnlyDocument, gqlNumber, gqlString, menusQuery, nearbyRestaurantsQuery, restaurantByShortUrlQuery } from '../src/graphql.js';
 
 describe('literal builders', () => {
   it('escapes strings so input cannot break out of the literal', () => {
     expect(gqlString('a"b\\c\n')).toBe('"a\\"b\\\\c\\n"');
     expect(menusQuery('x"}){evil}#', 'ONLINE')).toContain('restaurantGuid:"x\\"}){evil}#"');
+    expect(restaurantByShortUrlQuery('x"){evil}#')).toContain('shortUrl:"x\\"){evil}#"');
   });
 
   it('refuses non-finite numbers', () => {

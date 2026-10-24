@@ -16,7 +16,7 @@ export interface FetchInit {
 }
 
 /** Every host this server reaches, as the subdomain of toasttab.com. */
-export type ToastHost = 'ws-api' | 'order' | 'www';
+export type ToastHost = 'ws-api' | 'order';
 
 export interface FetchResult {
   status: number;
