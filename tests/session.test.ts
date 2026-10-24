@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sessionFromPage } from '../src/session.js';
-import { SESSION_ID, sessionPage } from './fake-transport.js';
+import { sessionFromFlightData, sessionFromPage } from '../src/session.js';
+import { APP_SESSION_ID, appSessionPage, SESSION_ID, sessionPage } from './fake-transport.js';
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64');
 
@@ -25,5 +25,21 @@ describe('sessionFromPage', () => {
   it('ignores a data-content on some other element', () => {
     const content = encode({ id: 'abc', expiresAt: '2099-01-01T00:00:00Z' });
     expect(sessionFromPage(`<div id="other" data-content="${content}"/><div id="session"/>`)).toBeNull();
+  });
+});
+
+describe('sessionFromFlightData', () => {
+  it('reads the live toast.app shape: escaped JSON inside Next.js flight data', () => {
+    expect(sessionFromFlightData(appSessionPage().body)).toEqual({ id: APP_SESSION_ID, expiresAt: Date.parse('2099-01-01T01:00:00Z') });
+  });
+
+  it('tolerates unescaped and doubly escaped JSON', () => {
+    expect(sessionFromFlightData('{"id":"abc","issuedAt":"x","expiresAt":"2099-01-01T00:00:00Z"}')?.id).toBe('abc');
+    expect(sessionFromFlightData('{\\\\"id\\\\":\\\\"abc\\\\",\\\\"issuedAt\\\\":\\\\"x\\\\",\\\\"expiresAt\\\\":\\\\"2099-01-01T00:00:00Z\\\\"}')?.id).toBe('abc');
+  });
+
+  it('returns null without a session, or with an unreadable expiry', () => {
+    expect(sessionFromFlightData('<html>no session</html>')).toBeNull();
+    expect(sessionFromFlightData('{"id":"abc","issuedAt":"x","expiresAt":"soon"}')).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import type { ToastTransport } from '../src/transport.js';
 import { registerRestaurantTools } from '../src/tools/restaurants.js';
 import { registerMenuTools } from '../src/tools/menus.js';
 import { registerGraphqlTools } from '../src/tools/graphql.js';
+import { registerAccountTools } from '../src/tools/account.js';
 import { registerHealthcheckTools } from '../src/tools/healthcheck.js';
 
 export interface Registered {
@@ -22,6 +23,7 @@ export function registeredTools(): Registered[] {
   registerRestaurantTools(server, client);
   registerMenuTools(server, client);
   registerGraphqlTools(server, client);
+  registerAccountTools(server, client);
   registerHealthcheckTools(server, client, transport);
   return seen;
 }

@@ -6,7 +6,7 @@
 // The guest-session page (session.ts) is answered automatically and kept out
 // of `requests`, so a test about a tool sees only the gateway traffic. Tests
 // about the session itself set `sessionPage` and read `sessionRequests`.
-import { SESSION_PAGE_PATH } from '../src/session.js';
+import { GUEST_SESSION_PAGE_PATH, SESSION_PAGE_PATH } from '../src/session.js';
 import type { FetchInit, FetchResult, ToastTransport } from '../src/transport.js';
 
 export type Handler = (init: FetchInit, query: string | null) => FetchResult | Promise<FetchResult>;
@@ -28,10 +28,34 @@ export function sessionPage(id = SESSION_ID, expiresAt = '2099-01-01T01:00:00Z',
   };
 }
 
+export const APP_SESSION_ID = 'TEST0AppSessionIdNotARealOne000000000000x';
+
+/**
+ * A toast.app page carrying its session the way the live page does: escaped
+ * JSON inside the Next.js flight data (`self.__next_f.push([1,"…"])`).
+ */
+export function appSessionPage(id = APP_SESSION_ID, expiresAt = '2099-01-01T01:00:00Z', status = 404): FetchResult {
+  return {
+    status,
+    url: `https://toast.app${GUEST_SESSION_PAGE_PATH}`,
+    body: `<html><body><script>self.__next_f.push([1,"23:null\\n27:{\\"id\\":\\"${id}\\",\\"issuedAt\\":\\"2099-01-01T00:00:00Z\\",\\"expiresAt\\":\\"${expiresAt}\\"}\\n31:"])</script></body></html>`,
+  };
+}
+
+/** A JWT-shaped token (unsigned) whose `exp` is `expSeconds`. */
+export function fakeJwt(expSeconds = 4_070_908_800): string {
+  const part = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  return `${part({ alg: 'none' })}.${part({ exp: expSeconds, sub: 'test-guest' })}.sig`;
+}
+
 export class FakeTransport implements ToastTransport {
   readonly requests: FetchInit[] = [];
   readonly sessionRequests: FetchInit[] = [];
+  readonly cookieReads: string[] = [];
   sessionPage: () => FetchResult = () => sessionPage();
+  appSessionPage: () => FetchResult = () => appSessionPage();
+  /** toast.app cookies by name; a missing name reads as signed out. */
+  cookies: Record<string, string> = { 'toast-customer-access': fakeJwt() };
   constructor(public handler: Handler) {}
   async start(): Promise<void> {}
   async close(): Promise<void> {}
@@ -40,9 +64,17 @@ export class FakeTransport implements ToastTransport {
       this.sessionRequests.push(init);
       return this.sessionPage();
     }
+    if (init.host === 'app' && init.path === GUEST_SESSION_PAGE_PATH) {
+      this.sessionRequests.push(init);
+      return this.appSessionPage();
+    }
     this.requests.push(init);
     const query = new URL(init.path, 'https://x.invalid').searchParams.get('query');
     return this.handler(init, query);
+  }
+  async readAppCookie(name: string): Promise<string | null> {
+    this.cookieReads.push(name);
+    return this.cookies[name] ?? null;
   }
   /** The GraphQL documents sent, in order. */
   get queries(): string[] {

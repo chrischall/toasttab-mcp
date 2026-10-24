@@ -73,6 +73,22 @@
       "description": "Read a Toast restaurant's online or register menu, with search."
     },
     {
+      "name": "toast_list_orders",
+      "description": "List your Toast order history (needs a toast.app sign-in)."
+    },
+    {
+      "name": "toast_get_order",
+      "description": "Read one past Toast order as a receipt (needs a toast.app sign-in)."
+    },
+    {
+      "name": "toast_get_loyalty",
+      "description": "Read your Toast restaurant loyalty programs (needs a toast.app sign-in)."
+    },
+    {
+      "name": "toast_get_wallet",
+      "description": "Read your Toast Cash balance and units (needs a toast.app sign-in)."
+    },
+    {
       "name": "toast_graphql",
       "description": "Run a read-only GraphQL query against Toast's ordering gateway."
     },

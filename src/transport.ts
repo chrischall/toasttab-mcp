@@ -9,14 +9,26 @@
 export interface FetchInit {
   /** Path-and-query on `host`, e.g. `/do-federated-gateway/v1/graphql?query=…`. */
   path: string;
-  /** Which toasttab.com host to address. */
+  /** Which host to address. */
   host: ToastHost;
   method: 'GET';
   headers?: Record<string, string>;
+  /**
+   * For `ws-api` only: which signed-in site's tab relays the request. The
+   * gateway's sessions belong to one site each (session.ts), so a request
+   * rides a tab of the site that issued its session. Default `order`.
+   */
+  relay?: RelaySite;
 }
 
-/** Every host this server reaches, as the subdomain of toasttab.com. */
-export type ToastHost = 'ws-api' | 'order';
+/**
+ * Every host this server reaches: `ws-api` / `order` are toasttab.com
+ * subdomains, `app` is toast.app (Toast's guest web app).
+ */
+export type ToastHost = 'ws-api' | 'order' | 'app';
+
+/** The two sites whose tabs can relay gateway requests. */
+export type RelaySite = 'order' | 'app';
 
 export interface FetchResult {
   status: number;
@@ -32,6 +44,12 @@ export interface ToastTransport {
   /** Round-trip one request. Resolves for every HTTP status; throws only on
    *  bridge-level failure (no extension, no tab, timeout). */
   fetch(init: FetchInit): Promise<FetchResult>;
+  /**
+   * Read one declared cookie of the user's toast.app session, or null when
+   * it is not set (signed out). Optional: absent means account tools cannot
+   * authenticate.
+   */
+  readAppCookie?(name: string): Promise<string | null>;
   /** Bridge liveness, for `toast_healthcheck`. */
   bridgeStatus?(): unknown;
   /** One probe round-trip, for `toast_healthcheck`. */

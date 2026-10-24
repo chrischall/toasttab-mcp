@@ -7,9 +7,13 @@ describe('every tool declares its annotations', () => {
   it('registers the full surface', () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       'toast_find_restaurants',
+      'toast_get_loyalty',
       'toast_get_menu',
+      'toast_get_order',
+      'toast_get_wallet',
       'toast_graphql',
       'toast_healthcheck',
+      'toast_list_orders',
       'toast_resolve_restaurant',
     ]);
   });

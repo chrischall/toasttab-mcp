@@ -1,0 +1,122 @@
+{
+  "data": {
+    "guest": {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "allLoyaltyAccountInfos": [
+        {
+          "loyaltyAccountGuid": "00000000-0000-4000-8000-000000000012",
+          "rewards": [
+            {
+              "available": false,
+              "leftToTarget": 25,
+              "rewardMessages": {
+                "nextRewardMessage": "nextRewardMessage-25",
+                "rewardLabelMessage": "rewardLabelMessage-26",
+                "rewardValueMessage": "rewardValueMessage-27",
+                "unlockedMessage": null
+              },
+              "tags": [
+                "WALLET_BALANCE",
+                "CASHBACK"
+              ],
+              "target": 50
+            }
+          ],
+          "balances": [
+            {
+              "balance": 25,
+              "type": "POINTS"
+            }
+          ],
+          "programName": "programName-28",
+          "restaurant": {
+            "guid": "00000000-0000-4000-8000-000000000013",
+            "logoUrls": {
+              "xs": "https://example.invalid/image.png"
+            },
+            "name": "name-29",
+            "onlineOrderingEnabled": true,
+            "shortUrl": "shortUrl-30",
+            "loyaltyFeatures": {
+              "restaurantsInLoyaltySet": [
+                {
+                  "guid": "00000000-0000-4000-8000-000000000014",
+                  "location": {
+                    "address1": "address1-31",
+                    "city": "city-32",
+                    "state": "OR"
+                  },
+                  "name": "name-33",
+                  "onlineOrderingEnabled": true,
+                  "shortUrl": "shortUrl-34"
+                },
+                {
+                  "guid": "00000000-0000-4000-8000-000000000013",
+                  "location": {
+                    "address1": "address1-35",
+                    "city": "city-36",
+                    "state": "OR"
+                  },
+                  "name": "name-37",
+                  "onlineOrderingEnabled": true,
+                  "shortUrl": "shortUrl-38"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "loyaltyAccountGuid": "00000000-0000-4000-8000-000000000015",
+          "rewards": [
+            {
+              "available": true,
+              "leftToTarget": 0,
+              "rewardMessages": {
+                "nextRewardMessage": null,
+                "rewardLabelMessage": "rewardLabelMessage-39",
+                "rewardValueMessage": "rewardValueMessage-40",
+                "unlockedMessage": "unlockedMessage-41"
+              },
+              "tags": [
+                "WALLET_BALANCE",
+                "CASHBACK"
+              ],
+              "target": 7
+            }
+          ],
+          "balances": [
+            {
+              "balance": 7,
+              "type": "POINTS"
+            }
+          ],
+          "programName": "programName-42",
+          "restaurant": {
+            "guid": "00000000-0000-4000-8000-000000000004",
+            "logoUrls": {
+              "xs": "https://example.invalid/image.png"
+            },
+            "name": "name-43",
+            "onlineOrderingEnabled": true,
+            "shortUrl": "shortUrl-44",
+            "loyaltyFeatures": {
+              "restaurantsInLoyaltySet": [
+                {
+                  "guid": "00000000-0000-4000-8000-000000000004",
+                  "location": {
+                    "address1": "address1-45",
+                    "city": "city-46",
+                    "state": "NC"
+                  },
+                  "name": "name-47",
+                  "onlineOrderingEnabled": true,
+                  "shortUrl": "shortUrl-48"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
