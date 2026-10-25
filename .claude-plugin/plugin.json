@@ -1,7 +1,7 @@
 {
   "name": "toasttab-mcp",
   "displayName": "Toast",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Toast (toasttab.com) restaurants and menus for Claude — relays through a companion browser extension in your own browser.",
   "author": {
     "name": "Chris Hall",

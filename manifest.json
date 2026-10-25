@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "toasttab-mcp",
   "display_name": "Toast",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Toast (toasttab.com) for Claude — find restaurants that order through Toast near a point, resolve ordering links, and read their online or full register menus, with a read-only GraphQL explorer. Relays every request through the ContextMint Bridge browser extension (github.com/nullnet-app/contextmint-bridge) in your own browser, so Toast's Cloudflare check is passed by you, not bypassed.",
   "author": {
     "name": "Chris Hall",
