@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "MCP server for Toast (toasttab.com) — find restaurants that order through Toast and read their menus. Uses a companion browser extension so every request comes from your real browser.",
-    "version": "0.0.0"
+    "version": "1.0.0"
   },
   "plugins": [
     {
@@ -15,7 +15,7 @@
       "displayName": "Toast",
       "source": "./",
       "description": "Toast (toasttab.com) restaurants and menus for Claude — relays through a companion browser extension in your own browser.",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "author": {
         "name": "Chris Hall"
       },

@@ -1,6 +1,6 @@
 {
   "name": "toasttab-mcp",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "mcpName": "io.github.chrischall/toasttab-mcp",
   "description": "Toast (toasttab.com) restaurant + menu MCP server for Claude — developed and maintained by AI (Claude Code)",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
