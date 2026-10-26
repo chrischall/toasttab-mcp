@@ -37,11 +37,26 @@ describe('toast_find_restaurants', () => {
     expect(res).toMatchObject({ total: 1, returned: 1, warnings: ['one shard down'] });
   });
 
+  it('says how to see the rest when limit cut the list short', async () => {
+    const t = new FakeTransport(() => json({ data: { nearbyRestaurants: ROWS } }));
+    const res = parseToolResult<{ note?: string }>(
+      await (await harness(t)).callTool('toast_find_restaurants', { latitude: 35.2, longitude: -80.8, limit: 1 }),
+    );
+    expect(res.note).toBe('2 matched, 1 returned: pass a larger limit (max 300) to see the rest.');
+  });
+
+  it('adds no note when every match was returned', async () => {
+    const t = new FakeTransport(() => json({ data: { nearbyRestaurants: ROWS } }));
+    const res = parseToolResult<{ note?: string }>(await (await harness(t)).callTool('toast_find_restaurants', { latitude: 35.2, longitude: -80.8 }));
+    expect(res.note).toBeUndefined();
+  });
+
   it('warns when the 300-row cap was hit', async () => {
     const many = Array.from({ length: 300 }, (_, i) => ({ ...ROWS[0], guid: `g${i}` }));
     const t = new FakeTransport(() => json({ data: { nearbyRestaurants: many } }));
     const res = parseToolResult<{ note?: string }>(await (await harness(t)).callTool('toast_find_restaurants', { latitude: 35, longitude: -80 }));
     expect(res.note).toMatch(/300-row maximum/);
+    expect(res.note).toMatch(/300 matched, 25 returned: pass a larger limit/);
   });
 
   it('view full returns the raw data', async () => {

@@ -61,7 +61,7 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
     'toast_find_restaurants',
     {
       description:
-        "Find restaurants that take orders through Toast near a point (latitude/longitude — this server has no geocoder, so convert an address or city first). Returns each restaurant's GUID (what toast_get_menu needs), shortUrl, ordering link, address and distance, nearest first. Toast's directory lists restaurants OPEN for the dining option at `when` (default now): an empty or short result late at night means closed, not absent — retry with a daytime `when`. Optional `name` filters the results.",
+        "Find restaurants that take orders through Toast near a point (latitude/longitude — this server has no geocoder, so convert an address or city first). Returns each restaurant's GUID (what toast_get_menu needs), shortUrl, ordering link, address and distance, nearest first. Toast's directory lists restaurants OPEN for the dining option at `when` (default now): an empty or short result late at night means closed, not absent — retry with a daytime `when`. Optional `name` filters the results. There is no paging: `total` is every match and `limit` (default 25, max 300) is how many come back.",
       inputSchema: z.object({
         latitude,
         longitude,
@@ -87,12 +87,21 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
       });
       if (isFull(view)) return respond({ data: found.data, errors: found.errors });
       const matched: Restaurant[] = name ? found.restaurants.filter((r) => nameMatches(r.name, name)) : found.restaurants;
+      const returned = Math.min(limit, matched.length);
+      // There is no page token: `limit` is the only way past the first rows,
+      // so say so rather than leave the caller assuming the list is complete.
+      const notes = [
+        ...(returned < matched.length
+          ? [`${matched.length} matched, ${returned} returned: pass a larger limit (max ${NEARBY_PAGE_CAP}) to see the rest.`]
+          : []),
+        ...(found.capped
+          ? [`Toast returned its ${NEARBY_PAGE_CAP}-row maximum: the area may hold more. Narrow radius_miles to see them.`]
+          : []),
+      ];
       return respond({
         total: matched.length,
-        returned: Math.min(limit, matched.length),
-        ...(found.capped
-          ? { note: `Toast returned its ${NEARBY_PAGE_CAP}-row maximum: the area may hold more. Narrow radius_miles to see them.` }
-          : {}),
+        returned,
+        ...(notes.length ? { note: notes.join(' ') } : {}),
         ...(found.errors.length ? { warnings: found.errors.map((e) => e.message) } : {}),
         restaurants: matched.slice(0, limit),
       });
