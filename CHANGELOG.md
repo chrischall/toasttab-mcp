@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/chrischall/toasttab-mcp/compare/v1.0.0...v1.0.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **deps:** pick up mcp-utils 3.3.2 so toast_healthcheck explains an approval wait ([#10](https://github.com/chrischall/toasttab-mcp/issues/10)) ([3405384](https://github.com/chrischall/toasttab-mcp/commit/3405384dcd7ece5a49890992f70e1bfae19db3d7))
+* say when find_restaurants held results back, and describe menu listings accurately ([#8](https://github.com/chrischall/toasttab-mcp/issues/8)) ([4c226a3](https://github.com/chrischall/toasttab-mcp/commit/4c226a3ac110c06b0c41abeb5b624a17cda79040))
+
 ## 1.0.0 (2026-10-25)
 
 
