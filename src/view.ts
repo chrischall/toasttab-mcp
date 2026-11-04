@@ -36,7 +36,7 @@ export const ordersViewArg = () =>
     .enum(['compact', 'full', 'brief'])
     .optional()
     .describe(
-      `${NOTE} "brief" returns one line per order: restaurant (dining option, item count) — <when placed, ISO date-time, or "no date"> — <status>.`,
+      `${NOTE} "brief" returns one line per order: restaurant (dining option, item count) — <when placed, ISO date-time, or "no date"> — <status>. Note lines start with "-- ": "-- error: …" when Toast reported a partial failure, "-- more" when older orders exist (call again with view "compact" for next_page_token).`,
     );
 
 const BRIEF_MAX = 120;
@@ -58,4 +58,21 @@ export function briefOrderLine(order: OrderSummary): string {
   const room = BRIEF_MAX - tail.length;
   const shown = name.length > room ? `${name.slice(0, Math.max(room - 1, 0))}…` : name;
   return `${shown}${tail}`;
+}
+
+/**
+ * The brief view's trailing note lines (a line starting `-- ` is a note, not
+ * an order): `-- error: …` when the gateway answered GraphQL `errors` beside
+ * whatever data did arrive, and `-- more` when Toast sent a next_page_token.
+ * The brief view never silently drops what the compact view reports as
+ * `warnings` and `note`.
+ */
+export function briefOrderNotes(errors: Array<{ message: string }>, nextPageToken: string | null): string[] {
+  const notes: string[] = [];
+  if (errors.length) {
+    const line = `-- error: Toast reported a partial failure: ${errors.map((e) => e.message).join('; ')}`;
+    notes.push(line.length > BRIEF_MAX ? `${line.slice(0, BRIEF_MAX - 1)}…` : line);
+  }
+  if (nextPageToken) notes.push('-- more');
+  return notes;
 }
