@@ -141,11 +141,36 @@ describe('_meta.mint on tools/list', () => {
 describe('toast_list_orders view "brief"', () => {
   const LINE = /^.+ — (\d{4}-\d{2}-\d{2}T[\d:.]+Z|no date) — .+$/;
 
-  it('answers one line per order: title — ISO date — status, each ≤ 120 chars', async () => {
-    const t = new FakeTransport(() => json(fixture('GetGuestOrderHistory')));
+  /**
+   * Restaurant names are written by the restaurants, so the brief lines ride
+   * in the fleet's untrusted-data envelope, minified, note first.
+   */
+  const briefRaw = async (body: unknown): Promise<string> => {
+    const t = new FakeTransport(() => json(body));
     const res = await (await harness(t)).client.callTool({ name: 'toast_list_orders', arguments: { view: 'brief' } });
-    const text = (res.content as Array<{ type: string; text: string }>)[0].text;
-    const lines = text.split('\n').filter((l) => !l.startsWith('-- '));
+    return (res.content as Array<{ type: string; text: string }>)[0].text;
+  };
+  const briefLines = async (body: unknown): Promise<string[]> => {
+    const raw = await briefRaw(body);
+    const parsed = JSON.parse(raw) as { untrusted_content: unknown; note: unknown; data: unknown };
+    expect(parsed.untrusted_content).toBe(true);
+    expect(typeof parsed.note).toBe('string');
+    expect(Array.isArray(parsed.data)).toBe(true);
+    return parsed.data as string[];
+  };
+  const order = (restaurant: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+    data: { orderHistory: { nextPageToken: null, orders: [{ guid: 'x', restaurant, ...extra }] } },
+  });
+
+  it('answers the untrusted-data envelope, minified, note first, naming who wrote the text', async () => {
+    const raw = await briefRaw(fixture('GetGuestOrderHistory'));
+    expect(raw).not.toMatch(/\n/);
+    expect(Object.keys(JSON.parse(raw))).toEqual(['untrusted_content', 'note', 'data']);
+    expect((JSON.parse(raw) as { note: string }).note).toMatch(/restaurant/i);
+  });
+
+  it('answers one line per order: title — ISO date — status, each ≤ 120 chars', async () => {
+    const lines = (await briefLines(fixture('GetGuestOrderHistory'))).filter((l) => !l.startsWith('-- '));
     expect(lines).toEqual([
       `name-3 (take out, 6 items) — ${new Date(1768501800000).toISOString()} — ready for pickup`,
       `name-8 (dine in, 11 items) — ${new Date(1768501800000).toISOString()} — ready for pickup`,
@@ -157,49 +182,52 @@ describe('toast_list_orders view "brief"', () => {
   });
 
   it('says "no date" and shortens a long restaurant name to keep the line ≤ 120', async () => {
-    const long = 'R'.repeat(200);
-    const t = new FakeTransport(() =>
-      json({ data: { orderHistory: { nextPageToken: null, orders: [{ guid: 'x', restaurant: { name: long } }] } } }),
+    const [line] = await briefLines(order({ name: 'R'.repeat(200) }));
+    expect(line.length).toBeLessThanOrEqual(120);
+    expect(line).toMatch(/…\s— no date — unknown status$/);
+    expect(line).toMatch(LINE);
+  });
+
+  it('cuts the line as a WHOLE when the detail alone would overflow, title first', async () => {
+    const [line] = await briefLines(
+      order({ name: 'Cafe Long Name' }, { diningOptionBehavior: 'X'.repeat(200) }),
     );
-    const res = await (await harness(t)).client.callTool({ name: 'toast_list_orders', arguments: { view: 'brief' } });
-    const text = (res.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text.length).toBeLessThanOrEqual(120);
-    expect(text).toMatch(/…\s— no date — unknown status$/);
-    expect(text).toMatch(LINE);
+    expect(line.length).toBeLessThanOrEqual(120);
+    expect(line.startsWith('Cafe')).toBe(true);
   });
 
-  it('answers empty text when there are no orders', async () => {
-    const t = new FakeTransport(() => json({ data: { orderHistory: { nextPageToken: null, orders: [] } } }));
-    const res = await (await harness(t)).client.callTool({ name: 'toast_list_orders', arguments: { view: 'brief' } });
-    expect((res.content as Array<{ type: string; text: string }>)[0].text).toBe('');
+  it('answers the single note "-- none" when there are no orders', async () => {
+    expect(await briefLines({ data: { orderHistory: { nextPageToken: null, orders: [] } } })).toEqual(['-- none']);
   });
 
-  const briefText = async (body: unknown): Promise<string> => {
-    const t = new FakeTransport(() => json(body));
-    const res = await (await harness(t)).client.callTool({ name: 'toast_list_orders', arguments: { view: 'brief' } });
-    return (res.content as Array<{ type: string; text: string }>)[0].text;
-  };
+  it('escapes a restaurant name that starts with "-- " or "\\" with one leading backslash', async () => {
+    const [note] = await briefLines(order({ name: '-- none' }));
+    expect(note).toBe('\\-- none — no date — unknown status');
+    const [slash] = await briefLines(order({ name: '\\Bar' }));
+    expect(slash).toBe('\\\\Bar — no date — unknown status');
+  });
 
   it('appends a "-- more" note line when Toast says older orders exist', async () => {
-    const lines = (await briefText(fixture('GetGuestOrderHistory'))).split('\n');
+    const lines = await briefLines(fixture('GetGuestOrderHistory'));
     expect(lines.slice(0, -1).every((l) => LINE.test(l))).toBe(true);
     expect(lines.at(-1)).toBe('-- more');
   });
 
   it('carries GraphQL errors as a "-- error:" note line beside the orders that did arrive', async () => {
-    const text = await briefText({
+    const lines = await briefLines({
       data: { orderHistory: { nextPageToken: null, orders: [{ guid: 'x', restaurant: { name: 'Cafe' } }] } },
       errors: [{ message: 'orders[1].restaurant failed' }, { message: 'timeout' }],
     });
-    expect(text.split('\n')).toEqual([
+    expect(lines).toEqual([
       'Cafe — no date — unknown status',
       '-- error: Toast reported a partial failure: orders[1].restaurant failed; timeout',
     ]);
   });
 
   it('answers only the "-- error:" note when an errored response carries no orders', async () => {
-    const text = await briefText({ data: { orderHistory: null }, errors: [{ message: 'E'.repeat(300) }] });
-    expect(text).toMatch(/^-- error: Toast reported a partial failure: E+…$/);
-    expect(text.length).toBeLessThanOrEqual(120);
+    const lines = await briefLines({ data: { orderHistory: null }, errors: [{ message: 'E'.repeat(300) }] });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^-- error: Toast reported a partial failure: E+…$/);
+    expect(lines[0].length).toBeLessThanOrEqual(120);
   });
 });
