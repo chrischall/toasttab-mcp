@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/chrischall/toasttab-mcp/compare/v1.0.1...v1.1.0) (2026-11-04)
+
+
+### Features
+
+* context-group hints, a brief view on the order history ([#11](https://github.com/chrischall/toasttab-mcp/issues/11)) ([a96e847](https://github.com/chrischall/toasttab-mcp/commit/a96e847c8b40f142eb6f0252646c9dd1afcd124d))
+
+
+### Bug Fixes
+
+* **orders:** brief order history reports Toast errors and older pages ([#14](https://github.com/chrischall/toasttab-mcp/issues/14)) ([5287737](https://github.com/chrischall/toasttab-mcp/commit/5287737d007f13121c3acb8a50f16d39e26e68b1)), closes [#12](https://github.com/chrischall/toasttab-mcp/issues/12)
+
 ## [1.0.1](https://github.com/chrischall/toasttab-mcp/compare/v1.0.0...v1.0.1) (2026-10-26)
 
 
