@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/chrischall/toasttab-mcp/compare/v1.1.0...v1.1.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **brief:** align the brief view with the fleet contract ([#15](https://github.com/chrischall/toasttab-mcp/issues/15)) ([90dfc4d](https://github.com/chrischall/toasttab-mcp/commit/90dfc4de572370d4f8d9d37944e524a17e7f2e35))
+
 ## [1.1.0](https://github.com/chrischall/toasttab-mcp/compare/v1.0.1...v1.1.0) (2026-11-04)
 
 
