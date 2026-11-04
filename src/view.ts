@@ -1,4 +1,6 @@
 import { minifiedResult, resolveView, viewParam, type View } from '@chrischall/mcp-utils';
+import { z } from 'zod';
+import type { OrderSummary } from './parse.js';
 
 /**
  * The `view` rungs this server honours (`@chrischall/mcp-utils` vocabulary).
@@ -22,3 +24,38 @@ export function isFull(view: string | undefined): boolean {
 
 /** Minified JSON result; only ever used by read tools. */
 export const respond = (data: unknown): ReturnType<typeof minifiedResult> => minifiedResult(data);
+
+/**
+ * `toast_list_orders`' `view`: the shared rungs plus `brief`, the one-line-per
+ * order answer an mcp-host context-group intent tool asks a canonical read for.
+ * `viewParam` offers only the fleet's compact/full/raw vocabulary, so this
+ * one enum is spelled out here.
+ */
+export const ordersViewArg = () =>
+  z
+    .enum(['compact', 'full', 'brief'])
+    .optional()
+    .describe(
+      `${NOTE} "brief" returns one line per order: restaurant (dining option, item count) — <when placed, ISO date-time, or "no date"> — <status>.`,
+    );
+
+const BRIEF_MAX = 120;
+
+/** Toast's enum spelling (`READY_FOR_PICKUP`) as words (`ready for pickup`). */
+const words = (v: string | null): string | null => (v ? v.toLowerCase().replace(/_/g, ' ') : null);
+
+/**
+ * One order as one line, `title — <ISO date | no date> — <status>`, at most
+ * 120 characters (the restaurant name is shortened). The status is Toast's own
+ * value in words; an order with none says `unknown status` rather than
+ * inventing one.
+ */
+export function briefOrderLine(order: OrderSummary): string {
+  const name = order.restaurant.name ?? '(unknown restaurant)';
+  const detail = [words(order.dining_option), order.item_count !== null ? `${order.item_count} items` : null].filter(Boolean);
+  const suffix = detail.length ? ` (${detail.join(', ')})` : '';
+  const tail = `${suffix} — ${order.opened_at ?? 'no date'} — ${words(order.status) ?? 'unknown status'}`;
+  const room = BRIEF_MAX - tail.length;
+  const shown = name.length > room ? `${name.slice(0, Math.max(room - 1, 0))}…` : name;
+  return `${shown}${tail}`;
+}

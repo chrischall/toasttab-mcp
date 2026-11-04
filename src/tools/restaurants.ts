@@ -5,6 +5,7 @@ import { DINING_OPTIONS, nearbyRestaurantsQuery, restaurantByShortUrlQuery } fro
 import { nameMatches, NEARBY_PAGE_CAP, readRestaurantByShortUrl, shapeRestaurant, typenameOf, type Restaurant } from '../parse.js';
 import { parseToastReference } from '../urls.js';
 import { isFull, respond, viewArg } from '../view.js';
+import { foodMeta } from './hints.js';
 
 const READ = { readOnlyHint: true, idempotentHint: true, openWorldHint: true } as const;
 
@@ -76,6 +77,7 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
         view: viewArg(),
       }),
       annotations: READ,
+      _meta: foodMeta('lookup', { aliases: ['restaurants near me', 'takeout', 'order food', 'open now', 'places to eat'] }),
     },
     async ({ latitude, longitude, radius_miles, name, dining_option, when, limit, view }) => {
       const found = await findNearby(client, {
@@ -117,6 +119,7 @@ export function registerRestaurantTools(server: McpServer, client: ToastClient):
         reference: z.string().min(1).describe('A Toast ordering link, toast.app link, restaurant GUID, or shortUrl slug.'),
       }),
       annotations: READ,
+      _meta: foodMeta('lookup'),
     },
     async ({ reference }) => {
       const ref = parseToastReference(reference);
