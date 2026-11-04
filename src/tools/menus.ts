@@ -5,6 +5,7 @@ import { menusQuery } from '../graphql.js';
 import { filterMenus, mergeMenus, readMenus, type MenuSource } from '../parse.js';
 import { parseToastReference } from '../urls.js';
 import { isFull, respond, viewArg } from '../view.js';
+import { foodMeta } from './hints.js';
 
 export function registerMenuTools(server: McpServer, client: ToastClient): void {
   server.registerTool(
@@ -21,6 +22,7 @@ export function registerMenuTools(server: McpServer, client: ToastClient): void 
         view: viewArg(),
       }),
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+      _meta: foodMeta('lookup', { aliases: ['menu', 'out of stock', 'vegetarian', 'what can i get', 'prices'] }),
     },
     async ({ restaurant, source, query, include_out_of_stock, limit, view }) => {
       const ref = parseToastReference(restaurant);

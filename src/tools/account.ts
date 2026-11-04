@@ -18,7 +18,8 @@ import {
   readWallet,
 } from '../parse.js';
 import { isGuid } from '../urls.js';
-import { isFull, respond, viewArg } from '../view.js';
+import { briefOrderLine, isFull, ordersViewArg, respond, viewArg } from '../view.js';
+import { foodMeta } from './hints.js';
 
 // Every tool here reads the signed-in guest's own account through their
 // toast.app session in the bridged browser (client.ts guestGraphql). All are
@@ -42,15 +43,22 @@ export function registerAccountTools(server: McpServer, client: ToastClient): vo
       inputSchema: z.object({
         page_size: z.number().int().min(1).max(50).default(20).describe('Orders per page (1–50, default 20).'),
         next_page_token: z.string().min(1).optional().describe('From a previous answer, to fetch the next (older) page.'),
-        view: viewArg(),
+        view: ordersViewArg(),
       }),
       annotations: READ,
+      _meta: foodMeta('whats-new', {
+        canonical: true,
+        aliases: ['takeout', 'my order', 'food order', 'pickup', 'delivery', 'toast'],
+      }),
     },
     async ({ page_size, next_page_token, view }) => {
       const { data, errors } = await client.guestGraphql(ORDER_HISTORY, {
         // showAllOrdersFromAllSources mirrors toast.app's own Orders page.
         input: { pageSize: page_size, nextPageToken: next_page_token ?? null, showAllOrdersFromAllSources: true },
       });
+      if (view === 'brief') {
+        return { content: [{ type: 'text' as const, text: readOrderHistory(data).orders.map(briefOrderLine).join('\n') }] };
+      }
       if (isFull(view)) return respond({ data, errors });
       const page = readOrderHistory(data);
       return respond({
@@ -74,6 +82,7 @@ export function registerAccountTools(server: McpServer, client: ToastClient): vo
         view: viewArg(),
       }),
       annotations: READ,
+      _meta: foodMeta('lookup', { aliases: ['receipt', 'what did i order', 'how much did i pay'] }),
     },
     async ({ restaurant_guid, order_guid, view }) => {
       const { data, errors } = await client.guestGraphql(COMPLETED_ORDER, {
@@ -99,6 +108,7 @@ export function registerAccountTools(server: McpServer, client: ToastClient): vo
         `Your Toast restaurant loyalty programs: for each, the restaurant, program name, balances (e.g. POINTS), and reward progress (target, left to target, whether a reward is available, Toast's own reward messages). ${SIGN_IN}`,
       inputSchema: z.object({ view: viewArg() }),
       annotations: READ,
+      _meta: foodMeta('lookup', { aliases: ['rewards', 'points', 'loyalty card', 'free item'] }),
     },
     async ({ view }) => {
       const { data, errors } = await client.guestGraphql(REWARDS);
@@ -119,6 +129,7 @@ export function registerAccountTools(server: McpServer, client: ToastClient): vo
         `Your Toast Cash: the available balance (stored value such as gifted Toast Cash included), the next expiry, the units that expire, and the units you have received (gifts name the sender). All amounts in dollars. ${SIGN_IN}`,
       inputSchema: z.object({ view: viewArg() }),
       annotations: READ,
+      _meta: foodMeta('lookup', { aliases: ['toast cash', 'gift card', 'balance', 'credit'] }),
     },
     async ({ view }) => {
       // GetGuestWallet requires a time zone for "nearest expiry day"; the

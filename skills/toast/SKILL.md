@@ -29,6 +29,15 @@ With a signed-in toast.app tab in the bridged browser:
 
 On a "not signed in" or "expired" error, ask the user to open or reload toast.app and sign in. Don't retry in a loop. `dining_option` and `status` are Toast's own values. Don't relabel them (an order shown as "Delivery" on toast.app can carry `TAKE_OUT`).
 
+## In context groups
+
+In an mcp-host context group this server joins `food`. Every tool carries a `_meta.mint` hint except `toast_healthcheck`.
+
+- **Canonical read:** `toast_list_orders` answers `whats-new` ("is my order ready?", "anything new on my food orders?"). With `view: "brief"` it answers one line per order: `restaurant (dining option, N items) — <placed, ISO> — <status>`. It has no subject, because it reads the one signed-in toast.app account. It has no date range either, because Toast pages orders by token.
+- Nothing here answers `whats-due` or `whats-on`. Toast has no reservations or due dates. Restaurants, menus, receipts, loyalty and Toast Cash are `lookup` hints, and `toast_graphql` is `other`.
+- **A compound ask** like "anything new with dinner, and is my takeout ready?" fans out to every `food` member's canonical `whats-new` read. Toast adds one section of brief order lines.
+- This server is browser-bridged. When no bridged browser is connected (ContextMint Bridge with a signed-in toast.app tab), the group reports Toast as "needs your browser open" and does not call it. Ask the user to open the browser, then retry.
+
 ## Rules
 
 - Report out-of-stock items as out of stock today, not as removed.

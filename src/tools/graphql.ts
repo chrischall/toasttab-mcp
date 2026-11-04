@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import type { ToastClient } from '../client.js';
 import { assertReadOnlyDocument } from '../graphql.js';
 import { respond } from '../view.js';
+import { foodMeta } from './hints.js';
 
 /**
  * The escape hatch, and the way this server grows. Only two gateway
@@ -25,6 +26,7 @@ export function registerGraphqlTools(server: McpServer, client: ToastClient): vo
         operation_name: z.string().optional().describe('Which operation to run, if the document has several.'),
       }),
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+      _meta: foodMeta('other'),
     },
     async ({ query, variables, operation_name }) => {
       assertReadOnlyDocument(query);
