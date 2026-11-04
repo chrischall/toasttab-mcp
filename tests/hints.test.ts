@@ -145,7 +145,7 @@ describe('toast_list_orders view "brief"', () => {
     const t = new FakeTransport(() => json(fixture('GetGuestOrderHistory')));
     const res = await (await harness(t)).client.callTool({ name: 'toast_list_orders', arguments: { view: 'brief' } });
     const text = (res.content as Array<{ type: string; text: string }>)[0].text;
-    const lines = text.split('\n');
+    const lines = text.split('\n').filter((l) => !l.startsWith('-- '));
     expect(lines).toEqual([
       `name-3 (take out, 6 items) — ${new Date(1768501800000).toISOString()} — ready for pickup`,
       `name-8 (dine in, 11 items) — ${new Date(1768501800000).toISOString()} — ready for pickup`,
@@ -172,5 +172,34 @@ describe('toast_list_orders view "brief"', () => {
     const t = new FakeTransport(() => json({ data: { orderHistory: { nextPageToken: null, orders: [] } } }));
     const res = await (await harness(t)).client.callTool({ name: 'toast_list_orders', arguments: { view: 'brief' } });
     expect((res.content as Array<{ type: string; text: string }>)[0].text).toBe('');
+  });
+
+  const briefText = async (body: unknown): Promise<string> => {
+    const t = new FakeTransport(() => json(body));
+    const res = await (await harness(t)).client.callTool({ name: 'toast_list_orders', arguments: { view: 'brief' } });
+    return (res.content as Array<{ type: string; text: string }>)[0].text;
+  };
+
+  it('appends a "-- more" note line when Toast says older orders exist', async () => {
+    const lines = (await briefText(fixture('GetGuestOrderHistory'))).split('\n');
+    expect(lines.slice(0, -1).every((l) => LINE.test(l))).toBe(true);
+    expect(lines.at(-1)).toBe('-- more');
+  });
+
+  it('carries GraphQL errors as a "-- error:" note line beside the orders that did arrive', async () => {
+    const text = await briefText({
+      data: { orderHistory: { nextPageToken: null, orders: [{ guid: 'x', restaurant: { name: 'Cafe' } }] } },
+      errors: [{ message: 'orders[1].restaurant failed' }, { message: 'timeout' }],
+    });
+    expect(text.split('\n')).toEqual([
+      'Cafe — no date — unknown status',
+      '-- error: Toast reported a partial failure: orders[1].restaurant failed; timeout',
+    ]);
+  });
+
+  it('answers only the "-- error:" note when an errored response carries no orders', async () => {
+    const text = await briefText({ data: { orderHistory: null }, errors: [{ message: 'E'.repeat(300) }] });
+    expect(text).toMatch(/^-- error: Toast reported a partial failure: E+…$/);
+    expect(text.length).toBeLessThanOrEqual(120);
   });
 });

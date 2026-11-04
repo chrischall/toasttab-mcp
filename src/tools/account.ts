@@ -18,7 +18,7 @@ import {
   readWallet,
 } from '../parse.js';
 import { isGuid } from '../urls.js';
-import { briefOrderLine, isFull, ordersViewArg, respond, viewArg } from '../view.js';
+import { briefOrderLine, briefOrderNotes, isFull, ordersViewArg, respond, viewArg } from '../view.js';
 import { foodMeta } from './hints.js';
 
 // Every tool here reads the signed-in guest's own account through their
@@ -57,7 +57,9 @@ export function registerAccountTools(server: McpServer, client: ToastClient): vo
         input: { pageSize: page_size, nextPageToken: next_page_token ?? null, showAllOrdersFromAllSources: true },
       });
       if (view === 'brief') {
-        return { content: [{ type: 'text' as const, text: readOrderHistory(data).orders.map(briefOrderLine).join('\n') }] };
+        const page = readOrderHistory(data);
+        const lines = [...page.orders.map(briefOrderLine), ...briefOrderNotes(errors, page.next_page_token)];
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       }
       if (isFull(view)) return respond({ data, errors });
       const page = readOrderHistory(data);
