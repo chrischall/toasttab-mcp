@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/chrischall/toasttab-mcp/compare/v1.1.1...v1.1.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **deps:** bump @chrischall/mcp-utils ([#20](https://github.com/chrischall/toasttab-mcp/issues/20)) ([b7dfe73](https://github.com/chrischall/toasttab-mcp/commit/b7dfe73b559a7828d36c3c769385aba94cde0933))
+
 ## [1.1.1](https://github.com/chrischall/toasttab-mcp/compare/v1.1.0...v1.1.1) (2026-11-04)
 
 
