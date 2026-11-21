@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.2](https://github.com/chrischall/toasttab-mcp/compare/v1.1.1...v1.1.2) (2026-11-21)
+
+
+### Bug Fixes
+
+* **deps:** bump @chrischall/mcp-utils ([#20](https://github.com/chrischall/toasttab-mcp/issues/20)) ([b7dfe73](https://github.com/chrischall/toasttab-mcp/commit/b7dfe73b559a7828d36c3c769385aba94cde0933))
+* **deps:** bump @chrischall/mcp-utils ([#24](https://github.com/chrischall/toasttab-mcp/issues/24)) ([4b56fc9](https://github.com/chrischall/toasttab-mcp/commit/4b56fc90a58e667b5b56d5918e0108d2cc1c9485))
+* **deps:** bump the production-dependencies group with 3 updates ([#22](https://github.com/chrischall/toasttab-mcp/issues/22)) ([8504a7d](https://github.com/chrischall/toasttab-mcp/commit/8504a7d79c52bbc6de84d977d85300d2eb06d3ff))
+
 ## [1.1.1](https://github.com/chrischall/toasttab-mcp/compare/v1.1.0...v1.1.1) (2026-11-04)
 
 
